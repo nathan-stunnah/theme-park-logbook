@@ -1,5 +1,13 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+} from 'react'
+import type { Session } from '@supabase/supabase-js'
 import './App.css'
+import { isSupabaseConfigured, supabase } from './supabase'
 
 type Category =
   | 'Rollercoaster'
@@ -43,6 +51,14 @@ type Visit = {
 }
 
 type Panel = 'visit' | 'parks' | null
+type AuthMode = 'sign-in' | 'sign-up'
+type SyncStatus = 'local' | 'loading' | 'saving' | 'synced' | 'error'
+
+type CloudData = {
+  version: number
+  parks: Park[]
+  visits: Visit[]
+}
 
 const categories: Category[] = [
   'Rollercoaster',
@@ -219,6 +235,15 @@ function App() {
   const [visits, setVisits] = useState<Visit[]>(() =>
     readSavedData<Visit>('theme-park-visits-v2'),
   )
+  const [session, setSession] = useState<Session | null>(null)
+  const [authReady, setAuthReady] = useState(!supabase)
+  const [authMode, setAuthMode] = useState<AuthMode>('sign-in')
+  const [authEmail, setAuthEmail] = useState('')
+  const [authPassword, setAuthPassword] = useState('')
+  const [authMessage, setAuthMessage] = useState('')
+  const [authBusy, setAuthBusy] = useState(false)
+  const [cloudLoaded, setCloudLoaded] = useState(false)
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>('local')
 
   const [newParkName, setNewParkName] = useState('')
   const [attractionParkId, setAttractionParkId] = useState('')
@@ -244,6 +269,142 @@ function App() {
   useEffect(() => {
     localStorage.setItem('theme-park-visits-v2', JSON.stringify(visits))
   }, [visits])
+
+  useEffect(() => {
+    if (!supabase) return
+
+    void supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session)
+      setSyncStatus(data.session ? 'loading' : 'local')
+      setAuthReady(true)
+    })
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession)
+      setCloudLoaded(false)
+      setSyncStatus(nextSession ? 'loading' : 'local')
+      setAuthReady(true)
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
+
+  const loadCloudData = useCallback(async (userId: string) => {
+    if (!supabase) return
+
+    setSyncStatus('loading')
+
+    const { data: row, error } = await supabase
+      .from('user_data')
+      .select('data')
+      .eq('user_id', userId)
+      .maybeSingle()
+
+    if (error) {
+      setSyncStatus('error')
+      setAuthMessage(`Sync error: ${error.message}`)
+      return
+    }
+
+    const cloudData = row?.data as CloudData | undefined
+
+    if (cloudData) {
+      setParks(Array.isArray(cloudData.parks) ? cloudData.parks : [])
+      setVisits(Array.isArray(cloudData.visits) ? cloudData.visits : [])
+    }
+
+    setCloudLoaded(true)
+    setSyncStatus(cloudData ? 'synced' : 'saving')
+  }, [])
+
+  useEffect(() => {
+    if (!session) return
+
+    const timer = window.setTimeout(() => {
+      void loadCloudData(session.user.id)
+    }, 0)
+
+    return () => window.clearTimeout(timer)
+  }, [loadCloudData, session])
+
+  useEffect(() => {
+    const client = supabase
+    if (!client || !session || !cloudLoaded) return
+
+    const timer = window.setTimeout(() => {
+      setSyncStatus('saving')
+      void client
+        .from('user_data')
+        .upsert(
+          {
+            user_id: session.user.id,
+            data: {
+              version: 1,
+              parks,
+              visits,
+            },
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'user_id' },
+        )
+        .then(({ error }) => {
+          if (error) {
+            setSyncStatus('error')
+            setAuthMessage(`Sync error: ${error.message}`)
+          } else {
+            setSyncStatus('synced')
+          }
+        })
+    }, 700)
+
+    return () => window.clearTimeout(timer)
+  }, [cloudLoaded, parks, session, visits])
+
+  async function handleAuth(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!supabase) return
+
+    setAuthBusy(true)
+    setAuthMessage('')
+
+    const credentials = {
+      email: authEmail.trim(),
+      password: authPassword,
+    }
+
+    const { data, error } =
+      authMode === 'sign-up'
+        ? await supabase.auth.signUp({
+            ...credentials,
+            options: { emailRedirectTo: window.location.origin },
+          })
+        : await supabase.auth.signInWithPassword(credentials)
+
+    if (error) {
+      setAuthMessage(error.message)
+    } else if (authMode === 'sign-up' && !data.session) {
+      setAuthMessage('Check your email to confirm the account, then sign in here.')
+      setAuthMode('sign-in')
+    } else {
+      setAuthMessage('Signed in. Loading your private cloud data…')
+      setAuthPassword('')
+    }
+
+    setAuthBusy(false)
+  }
+
+  async function handleSignOut() {
+    if (!supabase) return
+    await supabase.auth.signOut()
+    setAuthMessage('Signed out. This device will continue using its local copy.')
+  }
+
+  async function handleSyncNow() {
+    if (!session) return
+    await loadCloudData(session.user.id)
+  }
 
   const selectedPark = parks.find((park) => park.id === visitParkId)
 
@@ -491,6 +652,106 @@ function App() {
           </button>
         </div>
       </header>
+
+      <section className="content-section sync-section">
+        {!isSupabaseConfigured ? (
+          <div className="sync-card warning">
+            <span>☁️</span>
+            <div>
+              <strong>Cloud sync needs its project settings</strong>
+              <p>Add the Supabase URL and publishable key to enable sign-in.</p>
+            </div>
+            <span className="sync-pill local">Local only</span>
+          </div>
+        ) : !authReady ? (
+          <div className="sync-card">
+            <span>☁️</span>
+            <div>
+              <strong>Checking your secure session…</strong>
+              <p>Your offline records remain available while this completes.</p>
+            </div>
+          </div>
+        ) : session ? (
+          <div className="sync-card">
+            <span>☁️</span>
+            <div>
+              <strong>{session.user.email}</strong>
+              <p>Your parks and visits are protected by your Supabase account.</p>
+              {authMessage && <small>{authMessage}</small>}
+            </div>
+            <div className="sync-actions">
+              <span className={`sync-pill ${syncStatus}`}>
+                {syncStatus === 'loading' && 'Loading…'}
+                {syncStatus === 'saving' && 'Saving…'}
+                {syncStatus === 'synced' && 'Synced'}
+                {syncStatus === 'error' && 'Sync error'}
+                {syncStatus === 'local' && 'Local only'}
+              </span>
+              <button type="button" className="text-button" onClick={handleSyncNow}>
+                Sync now
+              </button>
+              <button type="button" className="text-button" onClick={handleSignOut}>
+                Sign out
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="sync-login">
+            <div className="sync-intro">
+              <span>☁️</span>
+              <div>
+                <strong>Private cross-device sync</strong>
+                <p>Sign in with the same account on your Mac and iPhone.</p>
+              </div>
+            </div>
+
+            <form className="sync-form" onSubmit={handleAuth}>
+              <label>
+                Email
+                <input
+                  type="email"
+                  value={authEmail}
+                  onChange={(event) => setAuthEmail(event.target.value)}
+                  autoComplete="email"
+                  required
+                />
+              </label>
+              <label>
+                Password
+                <input
+                  type="password"
+                  value={authPassword}
+                  onChange={(event) => setAuthPassword(event.target.value)}
+                  autoComplete={authMode === 'sign-up' ? 'new-password' : 'current-password'}
+                  minLength={6}
+                  required
+                />
+              </label>
+              <button className="button button-primary" type="submit" disabled={authBusy}>
+                {authBusy
+                  ? 'Please wait…'
+                  : authMode === 'sign-up'
+                    ? 'Create account'
+                    : 'Sign in'}
+              </button>
+            </form>
+
+            <div className="auth-footer">
+              <button
+                type="button"
+                className="text-button"
+                onClick={() => {
+                  setAuthMode((mode) => (mode === 'sign-in' ? 'sign-up' : 'sign-in'))
+                  setAuthMessage('')
+                }}
+              >
+                {authMode === 'sign-in' ? 'Create an account' : 'I already have an account'}
+              </button>
+              {authMessage && <p>{authMessage}</p>}
+            </div>
+          </div>
+        )}
+      </section>
 
       {parks.length === 0 && panel !== 'parks' && (
         <section className="content-section onboarding">

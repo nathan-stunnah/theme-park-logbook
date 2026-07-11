@@ -100,6 +100,123 @@
   border-top: 1px solid rgb(109 40 217 / 10%);
 }
 
+.sync-section {
+  padding-top: 30px;
+  padding-bottom: 30px;
+}
+
+.sync-card,
+.sync-login {
+  display: grid;
+  gap: 18px;
+  align-items: center;
+  padding: 20px 22px;
+  background: rgb(255 255 255 / 90%);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  box-shadow: 0 12px 30px rgb(88 28 135 / 8%);
+}
+
+.sync-card {
+  grid-template-columns: auto 1fr auto;
+}
+
+.sync-card > span:first-child,
+.sync-intro > span {
+  font-size: 1.8rem;
+}
+
+.sync-card p,
+.sync-intro p,
+.auth-footer p {
+  margin: 4px 0 0;
+  color: var(--muted);
+}
+
+.sync-card small {
+  display: block;
+  margin-top: 5px;
+  color: var(--muted);
+}
+
+.sync-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: end;
+}
+
+.sync-pill {
+  padding: 6px 10px;
+  font-size: 0.75rem;
+  font-weight: 900;
+  color: #075985;
+  background: #e0f2fe;
+  border-radius: 999px;
+}
+
+.sync-pill.synced {
+  color: #166534;
+  background: #dcfce7;
+}
+
+.sync-pill.saving,
+.sync-pill.loading {
+  color: #854d0e;
+  background: #fef9c3;
+}
+
+.sync-pill.error {
+  color: #991b1b;
+  background: #fee2e2;
+}
+
+.sync-pill.local {
+  color: #5b21b6;
+  background: #f3e8ff;
+}
+
+.sync-login {
+  grid-template-columns: 1fr 2fr;
+}
+
+.sync-intro {
+  display: flex;
+  gap: 13px;
+  align-items: center;
+}
+
+.sync-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.sync-form label {
+  display: grid;
+  gap: 6px;
+  font-weight: 800;
+}
+
+.sync-form input {
+  padding: 10px 12px;
+}
+
+.sync-form .button {
+  margin-bottom: 7px;
+}
+
+.auth-footer {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
 .section-heading {
   display: flex;
   gap: 20px;
@@ -526,8 +643,19 @@ select:focus {
   .management-grid,
   .park-library,
   .visit-history,
-  .visit-details {
+  .visit-details,
+  .sync-login,
+  .sync-form {
     grid-template-columns: 1fr;
+  }
+
+  .sync-card {
+    grid-template-columns: auto 1fr;
+  }
+
+  .sync-actions {
+    grid-column: 1 / -1;
+    justify-content: start;
   }
 
   .onboarding {
