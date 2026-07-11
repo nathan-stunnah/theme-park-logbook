@@ -26,6 +26,8 @@ type AttractionRecord = {
 
 type OpenForm = 'visit' | 'attraction' | null
 
+const currentYear = String(new Date().getFullYear())
+
 const categories: Category[] = [
   'Rollercoaster',
   'Flat Ride',
@@ -34,6 +36,15 @@ const categories: Category[] = [
   'Scare Zone',
   'Other',
 ]
+
+const categoryIcons: Record<Category, string> = {
+  Rollercoaster: '🎢',
+  'Flat Ride': '🎠',
+  'Dark Ride': '👻',
+  'Scare Maze': '🎃',
+  'Scare Zone': '🧟',
+  Other: '🎪',
+}
 
 function readSavedData<T>(key: string): T[] {
   const savedData = localStorage.getItem(key)
@@ -49,8 +60,18 @@ function readSavedData<T>(key: string): T[] {
   }
 }
 
+function totalTimes(
+  records: AttractionRecord[],
+  chosenCategories: Category[],
+) {
+  return records
+    .filter((record) => chosenCategories.includes(record.category))
+    .reduce((total, record) => total + record.times, 0)
+}
+
 function App() {
   const [openForm, setOpenForm] = useState<OpenForm>(null)
+  const [selectedYear, setSelectedYear] = useState(currentYear)
 
   const [park, setPark] = useState('')
   const [visitDate, setVisitDate] = useState('')
@@ -132,32 +153,34 @@ function App() {
     )
   }
 
-  const coasterRecords = attractions.filter(
-    (attraction) => attraction.category === 'Rollercoaster',
+  const availableYears = Array.from(
+    new Set([
+      currentYear,
+      ...visits.map((visit) => visit.date.slice(0, 4)),
+      ...attractions.map((attraction) => attraction.date.slice(0, 4)),
+    ]),
+  ).sort((firstYear, secondYear) => Number(secondYear) - Number(firstYear))
+
+  const yearlyVisits = visits.filter((visit) =>
+    visit.date.startsWith(selectedYear),
   )
 
-  const rideRecords = attractions.filter((attraction) =>
-    ['Flat Ride', 'Dark Ride', 'Other'].includes(attraction.category),
+  const yearlyAttractions = attractions.filter((attraction) =>
+    attraction.date.startsWith(selectedYear),
   )
 
-  const scareRecords = attractions.filter((attraction) =>
-    ['Scare Maze', 'Scare Zone'].includes(attraction.category),
-  )
+  const coasterTotal = totalTimes(attractions, ['Rollercoaster'])
 
-  const coasterTotal = coasterRecords.reduce(
-    (total, attraction) => total + attraction.times,
-    0,
-  )
+  const rideTotal = totalTimes(attractions, [
+    'Flat Ride',
+    'Dark Ride',
+    'Other',
+  ])
 
-  const rideTotal = rideRecords.reduce(
-    (total, attraction) => total + attraction.times,
-    0,
-  )
-
-  const scareTotal = scareRecords.reduce(
-    (total, attraction) => total + attraction.times,
-    0,
-  )
+  const scareTotal = totalTimes(attractions, [
+    'Scare Maze',
+    'Scare Zone',
+  ])
 
   return (
     <main>
@@ -205,7 +228,6 @@ function App() {
 
             <div className="form-actions">
               <button type="submit">Save visit</button>
-
               <button type="button" onClick={() => setOpenForm(null)}>
                 Cancel
               </button>
@@ -289,7 +311,6 @@ function App() {
 
             <div className="form-actions">
               <button type="submit">Save attraction</button>
-
               <button type="button" onClick={() => setOpenForm(null)}>
                 Cancel
               </button>
@@ -325,6 +346,44 @@ function App() {
             <strong>{scareTotal}</strong>
             <p>Mazes and scare zones</p>
           </article>
+        </div>
+      </section>
+
+      <section>
+        <div className="year-heading">
+          <h2>Stats by year</h2>
+
+          <label className="year-picker">
+            Choose year
+            <select
+              value={selectedYear}
+              onChange={(event) => setSelectedYear(event.target.value)}
+            >
+              {availableYears.map((year) => (
+                <option key={year} value={year}>
+                  {year}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div className="year-stats-grid">
+          <article>
+            <span>🎟️</span>
+            <strong>{yearlyVisits.length}</strong>
+            <p>Park visits</p>
+          </article>
+
+          {categories.map((categoryName) => (
+            <article key={categoryName}>
+              <span>{categoryIcons[categoryName]}</span>
+              <strong>
+                {totalTimes(yearlyAttractions, [categoryName])}
+              </strong>
+              <p>{categoryName}</p>
+            </article>
+          ))}
         </div>
       </section>
 
