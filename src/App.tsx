@@ -7,9 +7,10 @@ import {
 } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import './App.css'
+import { PARK_IMPORTS } from './parkImports'
 import { isSupabaseConfigured, supabase } from './supabase'
 
-type Category =
+export type Category =
   | 'Rollercoaster'
   | 'Flat Ride'
   | 'Dark Ride'
@@ -24,6 +25,9 @@ type Attraction = {
   trackLengthMetres?: number
   topSpeedMph?: number
   inversions?: number
+  source?: 'themeparks-wiki'
+  sourceId?: string
+  importedAt?: string
 }
 
 type Park = {
@@ -60,6 +64,15 @@ type CloudData = {
   visits: Visit[]
 }
 
+type ImportCandidate = {
+  sourceId: string
+  name: string
+  category: Category
+  trackLengthMetres?: number
+  topSpeedMph?: number
+  inversions?: number
+}
+
 const categories: Category[] = [
   'Rollercoaster',
   'Flat Ride',
@@ -90,6 +103,12 @@ function readSavedData<T>(key: string): T[] {
   } catch {
     return []
   }
+}
+
+function sortAttractions(attractions: Attraction[]) {
+  return [...attractions].sort((first, second) =>
+    first.name.localeCompare(second.name, 'en-GB', { sensitivity: 'base' }),
+  )
 }
 
 function totalTimes(entries: VisitEntry[], selectedCategories: Category[]) {
@@ -257,6 +276,11 @@ function App() {
     parkId: string
     attractionId: string
   } | null>(null)
+  const [importParkKey, setImportParkKey] = useState(PARK_IMPORTS[0].key)
+  const [importCandidates, setImportCandidates] = useState<ImportCandidate[]>([])
+  const [selectedImports, setSelectedImports] = useState<Record<string, boolean>>({})
+  const [importLoading, setImportLoading] = useState(false)
+  const [importMessage, setImportMessage] = useState('')
 
   const [visitParkId, setVisitParkId] = useState('')
   const [visitDate, setVisitDate] = useState('')
@@ -474,8 +498,16 @@ function App() {
     const name = newAttractionName.trim()
     if (!attractionParkId || !name) return
     const targetParkId = editingAttraction?.parkId ?? attractionParkId
+    const existingAttraction = editingAttraction
+      ? parks
+          .find((park) => park.id === editingAttraction.parkId)
+          ?.attractions.find(
+            (attraction) => attraction.id === editingAttraction.attractionId,
+          )
+      : undefined
 
     const attractionDetails: Attraction = {
+      ...existingAttraction,
       id: editingAttraction?.attractionId ?? crypto.randomUUID(),
       name,
       category: newAttractionCategory,
@@ -518,6 +550,134 @@ function App() {
     resetAttractionForm()
   }
 
+  async function loadImportPreview() {
+    const definition = PARK_IMPORTS.find((park) => park.key === importParkKey)
+    if (!definition) return
+
+    setImportLoading(true)
+    setImportMessage('')
+
+    try {
+      const response = await fetch(
+        `https://api.themeparks.wiki/v1/entity/${definition.entityId}/children`,
+      )
+
+      if (!response.ok) {
+        throw new Error(`The attraction service returned ${response.status}.`)
+      }
+
+      const result = (await response.json()) as {
+        children?: Array<{
+          id: string
+          name: string
+          entityType: string
+        }>
+      }
+
+      const candidates = (result.children ?? [])
+        .filter((child) => child.entityType === 'ATTRACTION')
+        .map((child): ImportCandidate => {
+          const override = definition.overrides[child.name]
+
+          return {
+            sourceId: child.id,
+            name: child.name,
+            category: override?.category ?? 'Other',
+            trackLengthMetres: override?.trackLengthMetres,
+            topSpeedMph: override?.topSpeedMph,
+            inversions: override?.inversions,
+          }
+        })
+        .sort((first, second) =>
+          first.name.localeCompare(second.name, 'en-GB', { sensitivity: 'base' }),
+        )
+
+      setImportCandidates(candidates)
+      setSelectedImports(
+        Object.fromEntries(candidates.map((candidate) => [candidate.sourceId, true])),
+      )
+      setImportMessage(
+        `${candidates.length} current attractions found. Review the list before importing.`,
+      )
+    } catch (error) {
+      setImportCandidates([])
+      setSelectedImports({})
+      setImportMessage(
+        error instanceof Error
+          ? error.message
+          : 'The attraction list could not be loaded.',
+      )
+    } finally {
+      setImportLoading(false)
+    }
+  }
+
+  function importSelectedAttractions() {
+    const definition = PARK_IMPORTS.find((park) => park.key === importParkKey)
+    if (!definition) return
+
+    const chosen = importCandidates.filter(
+      (candidate) => selectedImports[candidate.sourceId],
+    )
+    const importedAt = new Date().toISOString()
+    const existingPark = parks.find(
+      (park) => park.name.toLowerCase() === definition.name.toLowerCase(),
+    )
+    const existingAttractions = existingPark?.attractions ?? []
+    const existingSourceIds = new Set(
+      existingAttractions.map((attraction) => attraction.sourceId).filter(Boolean),
+    )
+    const existingNames = new Set(
+      existingAttractions.map((attraction) => attraction.name.toLowerCase()),
+    )
+    const additions: Attraction[] = chosen
+      .filter(
+        (candidate) =>
+          !existingSourceIds.has(candidate.sourceId) &&
+          !existingNames.has(candidate.name.toLowerCase()),
+      )
+      .map((candidate) => ({
+        id: candidate.sourceId,
+        name: candidate.name,
+        category: candidate.category,
+        trackLengthMetres: candidate.trackLengthMetres,
+        topSpeedMph: candidate.topSpeedMph,
+        inversions: candidate.inversions,
+        source: 'themeparks-wiki',
+        sourceId: candidate.sourceId,
+        importedAt,
+      }))
+
+    if (existingPark) {
+      setParks((currentParks) =>
+        currentParks.map((park) =>
+          park.id === existingPark.id
+            ? {
+                ...park,
+                attractions: [...park.attractions, ...additions],
+              }
+            : park,
+        ),
+      )
+    } else {
+      const newPark: Park = {
+        id: crypto.randomUUID(),
+        name: definition.name,
+        attractions: additions,
+      }
+
+      setParks((currentParks) => [...currentParks, newPark])
+      setAttractionParkId(newPark.id)
+      setVisitParkId(newPark.id)
+    }
+
+    setImportMessage(
+      additions.length > 0
+        ? `${additions.length} attractions imported. You can edit or remove any of them below.`
+        : 'Nothing new was imported; those attractions are already in your library.',
+    )
+  }
+
   function resetAttractionForm() {
     setNewAttractionName('')
     setNewAttractionCategory('Rollercoaster')
@@ -542,7 +702,7 @@ function App() {
 
     if (!selectedPark || !visitDate) return
 
-    const entries: VisitEntry[] = selectedPark.attractions
+    const entries: VisitEntry[] = sortAttractions(selectedPark.attractions)
       .filter((attraction) => (rideCounts[attraction.id] ?? 0) > 0)
       .map((attraction) => ({
         attractionId: attraction.id,
@@ -626,6 +786,9 @@ function App() {
 
   const allTimeAchievements = calculateCoasterAchievements(allEntries)
   const yearlyAchievements = calculateCoasterAchievements(yearlyEntries)
+  const selectedImportCount = importCandidates.filter(
+    (candidate) => selectedImports[candidate.sourceId],
+  ).length
 
   return (
     <main className="app-shell">
@@ -783,6 +946,116 @@ function App() {
             </button>
           </div>
 
+          <div className="import-card">
+            <div className="import-card-heading">
+              <div>
+                <p className="eyebrow dark">QUICK START</p>
+                <h3>Import a current park catalogue</h3>
+                <p>
+                  Attraction names come from ThemeParks.wiki. Categories and coaster
+                  specifications are curated starting points and remain fully editable.
+                </p>
+              </div>
+              <a
+                href="https://api.themeparks.wiki/docs/v1/"
+                target="_blank"
+                rel="noreferrer"
+              >
+                View source
+              </a>
+            </div>
+
+            <div className="import-controls">
+              <label>
+                Park catalogue
+                <select
+                  value={importParkKey}
+                  onChange={(event) => {
+                    setImportParkKey(event.target.value)
+                    setImportCandidates([])
+                    setSelectedImports({})
+                    setImportMessage('')
+                  }}
+                >
+                  {PARK_IMPORTS.map((park) => (
+                    <option key={park.key} value={park.key}>
+                      {park.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                className="button button-secondary"
+                onClick={loadImportPreview}
+                disabled={importLoading}
+              >
+                {importLoading ? 'Loading…' : 'Load attraction list'}
+              </button>
+            </div>
+
+            {importMessage && <p className="import-message">{importMessage}</p>}
+
+            {importCandidates.length > 0 && (
+              <div className="import-preview">
+                <div className="import-preview-toolbar">
+                  <strong>{selectedImportCount} selected</strong>
+                  <button
+                    type="button"
+                    className="text-button"
+                    onClick={() =>
+                      setSelectedImports(
+                        Object.fromEntries(
+                          importCandidates.map((candidate) => [
+                            candidate.sourceId,
+                            selectedImportCount !== importCandidates.length,
+                          ]),
+                        ),
+                      )
+                    }
+                  >
+                    {selectedImportCount === importCandidates.length
+                      ? 'Deselect all'
+                      : 'Select all'}
+                  </button>
+                </div>
+
+                <ul className="import-preview-list">
+                  {importCandidates.map((candidate) => (
+                    <li key={candidate.sourceId}>
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={Boolean(selectedImports[candidate.sourceId])}
+                          onChange={(event) =>
+                            setSelectedImports((current) => ({
+                              ...current,
+                              [candidate.sourceId]: event.target.checked,
+                            }))
+                          }
+                        />
+                        <span>{categoryIcons[candidate.category]}</span>
+                        <span>
+                          <strong>{candidate.name}</strong>
+                          <small>{candidate.category}</small>
+                        </span>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+
+                <button
+                  type="button"
+                  className="button button-primary"
+                  onClick={importSelectedAttractions}
+                  disabled={selectedImportCount === 0}
+                >
+                  Import {selectedImportCount} attractions
+                </button>
+              </div>
+            )}
+          </div>
+
           <div className="management-grid">
             <form className="form-card" onSubmit={handleAddPark}>
               <h3>Add a park</h3>
@@ -917,12 +1190,15 @@ function App() {
                   <p className="empty-copy">No attractions added yet.</p>
                 ) : (
                   <ul className="attraction-library-list">
-                    {park.attractions.map((attraction) => (
+                    {sortAttractions(park.attractions).map((attraction) => (
                       <li key={attraction.id}>
                         <span>{categoryIcons[attraction.category]}</span>
                         <div>
                           <strong>{attraction.name}</strong>
                           <small>{attraction.category}</small>
+                          {attraction.source === 'themeparks-wiki' && (
+                            <small>Imported catalogue entry · editable</small>
+                          )}
                           {attraction.category === 'Rollercoaster' && (
                             <small>
                               {attraction.trackLengthMetres ?? '—'} m ·{' '}
@@ -1011,7 +1287,7 @@ function App() {
                 </p>
               ) : (
                 <div className="ride-list">
-                  {selectedPark.attractions.map((attraction) => {
+                  {sortAttractions(selectedPark.attractions).map((attraction) => {
                     const selected = (rideCounts[attraction.id] ?? 0) > 0
 
                     return (

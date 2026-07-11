@@ -300,6 +300,108 @@
   gap: 20px;
 }
 
+.import-card {
+  padding: 22px;
+  margin-bottom: 20px;
+  background: linear-gradient(135deg, #faf5ff, #fff7ed);
+  border: 1px solid #d8b4fe;
+  border-radius: 20px;
+}
+
+.import-card-heading,
+.import-controls,
+.import-preview-toolbar {
+  display: flex;
+  gap: 18px;
+  align-items: end;
+  justify-content: space-between;
+}
+
+.import-card-heading h3,
+.import-card-heading p {
+  margin: 0;
+}
+
+.import-card-heading p:last-child {
+  max-width: 720px;
+  margin-top: 6px;
+  color: var(--muted);
+}
+
+.import-card-heading a {
+  flex: 0 0 auto;
+  font-weight: 800;
+  color: var(--purple);
+}
+
+.import-controls {
+  justify-content: start;
+  margin-top: 18px;
+}
+
+.import-controls label {
+  display: grid;
+  flex: 1;
+  gap: 7px;
+  max-width: 440px;
+  font-weight: 800;
+}
+
+.import-message {
+  margin: 16px 0 0;
+  color: var(--muted);
+}
+
+.import-preview {
+  padding-top: 18px;
+  margin-top: 18px;
+  border-top: 1px solid #e9d5ff;
+}
+
+.import-preview-toolbar {
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.import-preview-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  max-height: 430px;
+  padding: 4px;
+  margin: 0 0 18px;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.import-preview-list li {
+  background: rgb(255 255 255 / 80%);
+  border: 1px solid #eee4f2;
+  border-radius: 12px;
+}
+
+.import-preview-list label {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+.import-preview-list input {
+  width: 18px;
+  height: 18px;
+}
+
+.import-preview-list label > span:last-child {
+  display: grid;
+}
+
+.import-preview-list small {
+  color: var(--muted);
+}
+
 .form-card,
 .visit-form {
   display: grid;
@@ -646,6 +748,20 @@ select:focus {
   .visit-details,
   .sync-login,
   .sync-form {
+    grid-template-columns: 1fr;
+  }
+
+  .import-card-heading,
+  .import-controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .import-controls label {
+    max-width: none;
+  }
+
+  .import-preview-list {
     grid-template-columns: 1fr;
   }
 
