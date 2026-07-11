@@ -1,0 +1,263 @@
+main {
+  min-height: 100vh;
+  color: #211633;
+  background:
+    radial-gradient(circle at 10% 35%, #ffe3a3 0 80px, transparent 81px),
+    #fff8ed;
+}
+
+header {
+  padding: 72px 24px;
+  text-align: center;
+  color: white;
+  background: linear-gradient(135deg, #6d28d9, #db2777 55%, #f97316);
+  border-radius: 0 0 40px 40px;
+}
+
+header > p:first-child {
+  margin: 0 0 12px;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  color: #fde68a;
+}
+
+header h1 {
+  margin: 0;
+  font-size: clamp(2.5rem, 8vw, 5rem);
+  line-height: 1;
+  letter-spacing: -0.05em;
+}
+
+header h1 + p {
+  margin: 20px 0 28px;
+  font-size: 1.1rem;
+  color: #fdf4ff;
+}
+
+button {
+  padding: 14px 24px;
+  font-weight: 800;
+  color: #581c87;
+  cursor: pointer;
+  background: #fde047;
+  border: 0;
+  border-radius: 999px;
+  box-shadow: 0 8px 0 #f59e0b;
+  transition:
+    transform 150ms ease,
+    box-shadow 150ms ease;
+}
+
+button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 0 #f59e0b;
+}
+
+button:active {
+  transform: translateY(5px);
+  box-shadow: 0 3px 0 #f59e0b;
+}
+
+section {
+  width: min(1100px, calc(100% - 32px));
+  padding: 48px 0;
+  margin: 0 auto;
+}
+
+section h2 {
+  margin: 0 0 24px;
+  font-size: 1.6rem;
+}
+
+section > div {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 18px;
+}
+
+article {
+  display: grid;
+  gap: 8px;
+  min-height: 180px;
+  padding: 24px;
+  background: white;
+  border-top: 8px solid #facc15;
+  border-radius: 22px;
+  box-shadow: 0 14px 35px rgb(88 28 135 / 12%);
+}
+
+article:nth-child(2) {
+  border-color: #ec4899;
+}
+
+article:nth-child(3) {
+  border-color: #06b6d4;
+}
+
+article:nth-child(4) {
+  border-color: #f97316;
+}
+
+article span {
+  font-size: 2rem;
+}
+
+article strong {
+  align-self: end;
+  font-size: 3rem;
+  line-height: 1;
+}
+
+article p {
+  margin: 0;
+  font-weight: 700;
+  color: #776785;
+}
+
+@media (max-width: 700px) {
+  header {
+    padding: 56px 20px;
+    border-radius: 0 0 28px 28px;
+  }
+
+  section > div {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  article {
+    min-height: 150px;
+    padding: 18px;
+  }
+
+  article strong {
+    font-size: 2.3rem;
+  }
+
+  form {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+  padding: 24px;
+  background: white;
+  border-radius: 22px;
+  box-shadow: 0 14px 35px rgb(88 28 135 / 12%);
+}
+
+form label {
+  display: grid;
+  gap: 8px;
+  font-weight: 800;
+}
+
+form input {
+  width: 100%;
+  padding: 13px;
+  font: inherit;
+  color: #211633;
+  background: #fffaf3;
+  border: 2px solid #e9d5ff;
+  border-radius: 12px;
+}
+
+form input:focus {
+  border-color: #9333ea;
+  outline: 3px solid rgb(147 51 234 / 15%);
+}
+
+.form-actions {
+  display: flex;
+  grid-column: 1 / -1;
+  gap: 18px;
+  align-items: center;
+}
+
+.form-actions button:last-child {
+  color: #6b21a8;
+  background: transparent;
+  box-shadow: none;
+}
+
+.visit-list {
+  display: grid;
+  gap: 12px;
+  padding: 0;
+  list-style: none;
+}
+
+.visit-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 18px 20px;
+  background: white;
+  border-left: 6px solid #ec4899;
+  border-radius: 14px;
+  box-shadow: 0 8px 24px rgb(88 28 135 / 10%);
+}
+
+.visit-list span {
+  color: #776785;
+}
+
+@media (max-width: 700px) {
+  form {
+    grid-template-columns: 1fr;
+  }
+
+  .visit-list li {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+}
+
+.visit-list li > div {
+  display: grid;
+  gap: 4px;
+}
+
+.delete-button {
+  align-self: center;
+  padding: 8px 14px;
+  color: #be123c;
+  background: #ffe4e6;
+  box-shadow: none;
+}
+
+.delete-button:hover {
+  box-shadow: none;
+}
+
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  justify-content: center;
+}
+
+.hero-actions button:last-child {
+  color: white;
+  background: #7c3aed;
+  box-shadow: 0 8px 0 #4c1d95;
+}
+
+.hero-actions button:last-child:hover {
+  box-shadow: 0 10px 0 #4c1d95;
+}
+
+form select {
+  width: 100%;
+  padding: 13px;
+  font: inherit;
+  color: #211633;
+  background: #fffaf3;
+  border: 2px solid #e9d5ff;
+  border-radius: 12px;
+}
+
+form select:focus {
+  border-color: #9333ea;
+  outline: 3px solid rgb(147 51 234 / 15%);
+}
+}
