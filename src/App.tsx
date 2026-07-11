@@ -136,6 +136,15 @@ function formatDate(date: string) {
   }).format(new Date(`${date}T12:00:00`))
 }
 
+function formatSyncTime(date: string) {
+  return new Intl.DateTimeFormat('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(date))
+}
+
 type CoasterAchievements = {
   trackKilometres: number
   trackMiles: number
@@ -263,6 +272,7 @@ function App() {
   const [authBusy, setAuthBusy] = useState(false)
   const [cloudLoaded, setCloudLoaded] = useState(false)
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('local')
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null)
 
   const [newParkName, setNewParkName] = useState('')
   const [attractionParkId, setAttractionParkId] = useState('')
@@ -285,6 +295,7 @@ function App() {
   const [visitParkId, setVisitParkId] = useState('')
   const [visitDate, setVisitDate] = useState('')
   const [rideCounts, setRideCounts] = useState<Record<string, number>>({})
+  const [editingVisitId, setEditingVisitId] = useState<string | null>(null)
 
   useEffect(() => {
     localStorage.setItem('theme-park-parks-v2', JSON.stringify(parks))
@@ -309,6 +320,7 @@ function App() {
       setSession(nextSession)
       setCloudLoaded(false)
       setSyncStatus(nextSession ? 'loading' : 'local')
+      if (!nextSession) setLastSyncedAt(null)
       setAuthReady(true)
     })
 
@@ -322,7 +334,7 @@ function App() {
 
     const { data: row, error } = await supabase
       .from('user_data')
-      .select('data')
+      .select('data, updated_at')
       .eq('user_id', userId)
       .maybeSingle()
 
@@ -337,6 +349,7 @@ function App() {
     if (cloudData) {
       setParks(Array.isArray(cloudData.parks) ? cloudData.parks : [])
       setVisits(Array.isArray(cloudData.visits) ? cloudData.visits : [])
+      if (row?.updated_at) setLastSyncedAt(row.updated_at as string)
     }
 
     setCloudLoaded(true)
@@ -379,6 +392,7 @@ function App() {
             setAuthMessage(`Sync error: ${error.message}`)
           } else {
             setSyncStatus('synced')
+            setLastSyncedAt(new Date().toISOString())
           }
         })
     }, 700)
@@ -702,7 +716,7 @@ function App() {
 
     if (!selectedPark || !visitDate) return
 
-    const entries: VisitEntry[] = sortAttractions(selectedPark.attractions)
+    const selectedEntries: VisitEntry[] = sortAttractions(selectedPark.attractions)
       .filter((attraction) => (rideCounts[attraction.id] ?? 0) > 0)
       .map((attraction) => ({
         attractionId: attraction.id,
@@ -713,16 +727,68 @@ function App() {
         topSpeedMph: attraction.topSpeedMph,
         inversions: attraction.inversions,
       }))
+    const originalVisit = editingVisitId
+      ? visits.find((visit) => visit.id === editingVisitId)
+      : undefined
+    const currentAttractionIds = new Set(
+      selectedPark.attractions.map((attraction) => attraction.id),
+    )
+    const historicalEntries = (originalVisit?.entries ?? []).filter(
+      (entry) => !currentAttractionIds.has(entry.attractionId),
+    )
+    const entries = [...selectedEntries, ...historicalEntries].sort((first, second) =>
+      first.name.localeCompare(second.name, 'en-GB', { sensitivity: 'base' }),
+    )
 
     const newVisit: Visit = {
-      id: crypto.randomUUID(),
+      id: editingVisitId ?? crypto.randomUUID(),
       parkId: selectedPark.id,
       parkName: selectedPark.name,
       date: visitDate,
       entries,
     }
 
-    setVisits((currentVisits) => [newVisit, ...currentVisits])
+    setVisits((currentVisits) =>
+      editingVisitId
+        ? currentVisits.map((visit) =>
+            visit.id === editingVisitId ? newVisit : visit,
+          )
+        : [newVisit, ...currentVisits],
+    )
+    closeVisitPanel()
+  }
+
+  function openNewVisit() {
+    setEditingVisitId(null)
+    setVisitDate('')
+    setRideCounts({})
+    if (!visitParkId && parks[0]) setVisitParkId(parks[0].id)
+    setPanel('visit')
+  }
+
+  function startEditingVisit(visit: Visit) {
+    const parkStillExists = parks.some((park) => park.id === visit.parkId)
+
+    if (!parkStillExists) {
+      window.alert(
+        'This visit cannot be edited until its park exists in your park library again.',
+      )
+      return
+    }
+
+    setEditingVisitId(visit.id)
+    setVisitParkId(visit.parkId)
+    setVisitDate(visit.date)
+    setRideCounts(
+      Object.fromEntries(
+        visit.entries.map((entry) => [entry.attractionId, entry.times]),
+      ),
+    )
+    setPanel('visit')
+  }
+
+  function closeVisitPanel() {
+    setEditingVisitId(null)
     setVisitDate('')
     setRideCounts({})
     setPanel(null)
@@ -743,12 +809,30 @@ function App() {
   }
 
   function deleteVisit(id: string) {
+    const visit = visits.find((item) => item.id === id)
+    if (!visit) return
+
+    const confirmed = window.confirm(
+      `Delete the ${formatDate(visit.date)} visit to ${visit.parkName}? This cannot be undone.`,
+    )
+    if (!confirmed) return
+
     setVisits((currentVisits) =>
       currentVisits.filter((visit) => visit.id !== id),
     )
   }
 
   function deleteAttraction(parkId: string, attractionId: string) {
+    const attraction = parks
+      .find((park) => park.id === parkId)
+      ?.attractions.find((item) => item.id === attractionId)
+    if (!attraction) return
+
+    const confirmed = window.confirm(
+      `Remove ${attraction.name} from this park library? Existing visit history will remain.`,
+    )
+    if (!confirmed) return
+
     setParks((currentParks) =>
       currentParks.map((park) =>
         park.id === parkId
@@ -801,7 +885,7 @@ function App() {
           <button
             type="button"
             className="button button-primary"
-            onClick={() => setPanel('visit')}
+            onClick={openNewVisit}
             disabled={parks.length === 0}
           >
             Log a visit
@@ -840,6 +924,9 @@ function App() {
             <div>
               <strong>{session.user.email}</strong>
               <p>Your parks and visits are protected by your Supabase account.</p>
+              {lastSyncedAt && (
+                <small>Last synced {formatSyncTime(lastSyncedAt)}</small>
+              )}
               {authMessage && <small>{authMessage}</small>}
             </div>
             <div className="sync-actions">
@@ -1237,10 +1324,12 @@ function App() {
         <section className="content-section panel">
           <div className="section-heading">
             <div>
-              <p className="eyebrow dark">NEW ENTRY</p>
-              <h2>Log a park visit</h2>
+              <p className="eyebrow dark">
+                {editingVisitId ? 'UPDATE ENTRY' : 'NEW ENTRY'}
+              </p>
+              <h2>{editingVisitId ? 'Edit park visit' : 'Log a park visit'}</h2>
             </div>
-            <button type="button" className="text-button" onClick={() => setPanel(null)}>
+            <button type="button" className="text-button" onClick={closeVisitPanel}>
               Cancel
             </button>
           </div>
@@ -1255,6 +1344,7 @@ function App() {
                     setVisitParkId(event.target.value)
                     setRideCounts({})
                   }}
+                  disabled={Boolean(editingVisitId)}
                   required
                 >
                   {parks.map((park) => (
@@ -1327,7 +1417,7 @@ function App() {
             </div>
 
             <button className="button button-primary save-visit" type="submit">
-              Save visit
+              {editingVisitId ? 'Update visit' : 'Save visit'}
             </button>
           </form>
         </section>
@@ -1469,9 +1559,22 @@ function App() {
                     <h3>{visit.parkName}</h3>
                     <p>{formatDate(visit.date)}</p>
                   </div>
-                  <button type="button" className="delete-link" onClick={() => deleteVisit(visit.id)}>
-                    Delete
-                  </button>
+                  <div className="visit-card-actions">
+                    <button
+                      type="button"
+                      className="text-button"
+                      onClick={() => startEditingVisit(visit)}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      className="delete-link"
+                      onClick={() => deleteVisit(visit.id)}
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </div>
 
                 {visit.entries.length === 0 ? (

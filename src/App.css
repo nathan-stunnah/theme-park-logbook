@@ -476,6 +476,12 @@ select:focus {
   justify-content: space-between;
 }
 
+.visit-card-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 10px;
+}
+
 .attraction-library-list,
 .visit-entry-list {
   display: grid;
