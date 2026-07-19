@@ -186,6 +186,26 @@ function getTodayDateInputValue() {
   return `${today.getFullYear()}-${month}-${day}`
 }
 
+function getTimeOfDay(date: Date): RideLog['timeOfDay'] {
+  const hour = date.getHours()
+  return hour >= 7 && hour < 19 ? 'day' : 'night'
+}
+
+function formatRideLogSummary(rideLog: RideLog) {
+  return [
+    rideLog.riddenAt ? formatVisitTime(rideLog.riddenAt) : null,
+    rideLog.timeOfDay === 'day'
+      ? 'Day'
+      : rideLog.timeOfDay === 'night'
+        ? 'Night'
+        : null,
+    rideLog.row ? `Row ${rideLog.row}` : null,
+    rideLog.seat ? `Seat ${rideLog.seat}` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+}
+
 function formatVisitTime(date: string) {
   return new Intl.DateTimeFormat('en-GB', {
     hour: '2-digit',
@@ -1025,20 +1045,40 @@ function App() {
 
       const additions = Array.from(
         { length: nextCount - matchingLogs.length },
-        (): RideLog => ({
-          id: crypto.randomUUID(),
-          attractionId: attraction.id,
-          name: attraction.name,
-          category: attraction.category,
-          trackLengthMetres: attraction.trackLengthMetres,
-          topSpeedMph: attraction.topSpeedMph,
-          inversions: attraction.inversions,
-          ...(editingActiveVisit ? { riddenAt: new Date().toISOString() } : {}),
-        }),
+        (): RideLog => {
+          const loggedAt = new Date()
+
+          return {
+            id: crypto.randomUUID(),
+            attractionId: attraction.id,
+            name: attraction.name,
+            category: attraction.category,
+            trackLengthMetres: attraction.trackLengthMetres,
+            topSpeedMph: attraction.topSpeedMph,
+            inversions: attraction.inversions,
+            ...(editingActiveVisit
+              ? {
+                  riddenAt: loggedAt.toISOString(),
+                  timeOfDay: getTimeOfDay(loggedAt),
+                }
+              : {}),
+          }
+        },
       )
 
       return [...otherLogs, ...matchingLogs, ...additions]
     })
+  }
+
+  function updateRideLogDetails(
+    rideLogId: string,
+    details: Partial<Pick<RideLog, 'row' | 'seat' | 'timeOfDay'>>,
+  ) {
+    setDraftRideLogs((currentRideLogs) =>
+      currentRideLogs.map((rideLog) =>
+        rideLog.id === rideLogId ? { ...rideLog, ...details } : rideLog,
+      ),
+    )
   }
 
   function deleteVisit(id: string) {
@@ -1848,6 +1888,9 @@ function App() {
                 <div className="ride-list">
                   {sortAttractions(selectedPark.attractions).map((attraction) => {
                     const selected = (rideCounts[attraction.id] ?? 0) > 0
+                    const attractionRideLogs = draftRideLogs.filter(
+                      (rideLog) => rideLog.attractionId === attraction.id,
+                    )
 
                     return (
                       <div className={`ride-row${selected ? ' selected' : ''}`} key={attraction.id}>
@@ -1899,6 +1942,80 @@ function App() {
                             </button>
                           </div>
                         </div>
+                        {selected && (
+                          <div className="ride-log-details">
+                            <div className="ride-log-details-heading">
+                              <strong>Individual rides</strong>
+                              <small>Add the exact seat and when you rode.</small>
+                            </div>
+                            {attractionRideLogs.map((rideLog, index) => (
+                              <fieldset className="ride-log-card" key={rideLog.id}>
+                                <legend>
+                                  Ride {index + 1}
+                                  {rideLog.riddenAt && (
+                                    <span>
+                                      Logged at {formatVisitTime(rideLog.riddenAt)}
+                                    </span>
+                                  )}
+                                </legend>
+                                <div className="ride-log-fields">
+                                  <label>
+                                    Row
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      step="1"
+                                      inputMode="numeric"
+                                      aria-label={`Row for ${attraction.name} ride ${index + 1}`}
+                                      value={rideLog.row ?? ''}
+                                      onChange={(event) =>
+                                        updateRideLogDetails(rideLog.id, {
+                                          row: event.target.value || undefined,
+                                        })
+                                      }
+                                      placeholder="—"
+                                    />
+                                  </label>
+                                  <label>
+                                    Seat
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      step="1"
+                                      inputMode="numeric"
+                                      aria-label={`Seat for ${attraction.name} ride ${index + 1}`}
+                                      value={rideLog.seat ?? ''}
+                                      onChange={(event) =>
+                                        updateRideLogDetails(rideLog.id, {
+                                          seat: event.target.value || undefined,
+                                        })
+                                      }
+                                      placeholder="—"
+                                    />
+                                  </label>
+                                  <label>
+                                    Ride time
+                                    <select
+                                      aria-label={`Day or night for ${attraction.name} ride ${index + 1}`}
+                                      value={rideLog.timeOfDay ?? ''}
+                                      onChange={(event) =>
+                                        updateRideLogDetails(rideLog.id, {
+                                          timeOfDay:
+                                            (event.target.value as RideLog['timeOfDay']) ||
+                                            undefined,
+                                        })
+                                      }
+                                    >
+                                      <option value="">Choose</option>
+                                      <option value="day">Day</option>
+                                      <option value="night">Night</option>
+                                    </select>
+                                  </label>
+                                </div>
+                              </fieldset>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )
                   })}
@@ -2089,16 +2206,38 @@ function App() {
                   <p className="empty-copy">No attractions recorded for this visit.</p>
                 ) : (
                   <ul className="visit-entry-list">
-                    {getVisitDisplayEntries(visit).map((entry) => (
-                      <li key={entry.attractionId}>
-                        <span>{categoryIcons[entry.category]}</span>
-                        <div>
-                          <strong>{entry.name}</strong>
-                          <small>{entry.category}</small>
-                        </div>
-                        <b>× {entry.times}</b>
-                      </li>
-                    ))}
+                    {getVisitDisplayEntries(visit).map((entry) => {
+                      const detailedRideLogs = readRideLogs(visit)
+                        .filter(
+                          (rideLog) =>
+                            rideLog.attractionId === entry.attractionId,
+                        )
+                        .map((rideLog, index) => ({ rideLog, index }))
+                        .filter(
+                          ({ rideLog }) =>
+                            rideLog.row || rideLog.seat || rideLog.timeOfDay,
+                        )
+
+                      return (
+                        <li key={entry.attractionId}>
+                          <span>{categoryIcons[entry.category]}</span>
+                          <div>
+                            <strong>{entry.name}</strong>
+                            <small>{entry.category}</small>
+                            {detailedRideLogs.length > 0 && (
+                              <div className="ride-log-summary-list">
+                                {detailedRideLogs.map(({ rideLog, index }) => (
+                                  <span key={rideLog.id}>
+                                    Ride {index + 1}: {formatRideLogSummary(rideLog)}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          <b>× {entry.times}</b>
+                        </li>
+                      )
+                    })}
                   </ul>
                 )}
                 <VisitFunStats entries={enrichEntries([visit])} />
