@@ -59,7 +59,7 @@ type Visit = {
   entries: VisitEntry[]
 }
 
-type Panel = 'visit' | 'parks' | null
+type Page = 'home' | 'visits' | 'parks' | 'stats'
 type AuthMode = 'sign-in' | 'sign-up'
 type SyncStatus = 'local' | 'loading' | 'saving' | 'synced' | 'error'
 
@@ -94,6 +94,31 @@ const categoryIcons: Record<Category, string> = {
   'Scare Maze': '🎃',
   'Scare Zone': '🧟',
   Other: '🎪',
+}
+
+const navigationItems: Array<{ id: Page; label: string; icon: string }> = [
+  { id: 'home', label: 'Home', icon: '🏠' },
+  { id: 'visits', label: 'Visits', icon: '🎟️' },
+  { id: 'parks', label: 'Parks', icon: '🎡' },
+  { id: 'stats', label: 'Stats', icon: '📊' },
+]
+
+const pageDetails: Record<Exclude<Page, 'home'>, { eyebrow: string; title: string; copy: string }> = {
+  visits: {
+    eyebrow: 'YOUR PARK DAYS',
+    title: 'Visits',
+    copy: 'Log a new park day or revisit every attraction you experienced.',
+  },
+  parks: {
+    eyebrow: 'YOUR LIBRARY',
+    title: 'Parks and attractions',
+    copy: 'Build the park and attraction lists you use when recording visits.',
+  },
+  stats: {
+    eyebrow: 'YOUR ADVENTURE IN NUMBERS',
+    title: 'Statistics',
+    copy: 'Explore lifetime totals, yearly comparisons and coaster achievements.',
+  },
 }
 
 const currentYear = String(new Date().getFullYear())
@@ -259,7 +284,8 @@ function RideBreakdownCards({
 }
 
 function App() {
-  const [panel, setPanel] = useState<Panel>(null)
+  const [page, setPage] = useState<Page>('home')
+  const [visitEditorOpen, setVisitEditorOpen] = useState(false)
   const [selectedYear, setSelectedYear] = useState(currentYear)
 
   const [parks, setParks] = useState<Park[]>(() =>
@@ -773,7 +799,8 @@ function App() {
     setVisitDate('')
     setRideCounts({})
     if (!visitParkId && parks[0]) setVisitParkId(parks[0].id)
-    setPanel('visit')
+    setPage('visits')
+    setVisitEditorOpen(true)
   }
 
   function startEditingVisit(visit: Visit) {
@@ -794,14 +821,15 @@ function App() {
         visit.entries.map((entry) => [entry.attractionId, entry.times]),
       ),
     )
-    setPanel('visit')
+    setPage('visits')
+    setVisitEditorOpen(true)
   }
 
   function closeVisitPanel() {
     setEditingVisitId(null)
     setVisitDate('')
     setRideCounts({})
-    setPanel(null)
+    setVisitEditorOpen(false)
   }
 
   function setAttractionSelected(attractionId: string, selected: boolean) {
@@ -886,31 +914,79 @@ function App() {
 
   return (
     <main className="app-shell">
-      <header className="hero">
-        <p className="eyebrow">MY ADVENTURE ARCHIVE</p>
-        <h1>Theme Park Logbook</h1>
-        <p className="hero-copy">Keep every visit, ride and fright in one place.</p>
+      <header className="app-navigation">
+        <button
+          type="button"
+          className="nav-brand"
+          onClick={() => setPage('home')}
+          aria-label="Go to Theme Park Logbook home"
+        >
+          <span>🎢</span>
+          <strong>Park Logbook</strong>
+        </button>
+        <nav className="primary-nav" aria-label="Main navigation">
+          {navigationItems.map((item) => (
+            <button
+              type="button"
+              className={page === item.id ? 'active' : ''}
+              aria-current={page === item.id ? 'page' : undefined}
+              onClick={() => setPage(item.id)}
+              key={item.id}
+            >
+              <span aria-hidden="true">{item.icon}</span>
+              {item.label}
+            </button>
+          ))}
+        </nav>
+      </header>
 
-        <div className="hero-actions">
+      {page === 'home' && (
+        <header className="hero">
+          <p className="eyebrow">MY ADVENTURE ARCHIVE</p>
+          <h1>Theme Park Logbook</h1>
+          <p className="hero-copy">Keep every visit, ride and fright in one place.</p>
+
+          <div className="hero-actions">
+            <button
+              type="button"
+              className="button button-primary"
+              onClick={openNewVisit}
+              disabled={parks.length === 0}
+            >
+              Log a visit
+            </button>
+            <button
+              type="button"
+              className="button button-secondary"
+              onClick={() => setPage('parks')}
+            >
+              Manage parks
+            </button>
+          </div>
+        </header>
+      )}
+
+      {page !== 'home' && (
+        <section className="page-header">
+          <div>
+            <p className="eyebrow dark">{pageDetails[page].eyebrow}</p>
+            <h1>{pageDetails[page].title}</h1>
+            <p>{pageDetails[page].copy}</p>
+          </div>
+          {page === 'visits' && (
           <button
             type="button"
             className="button button-primary"
             onClick={openNewVisit}
             disabled={parks.length === 0}
           >
-            Log a visit
+            New visit
           </button>
-          <button
-            type="button"
-            className="button button-secondary"
-            onClick={() => setPanel('parks')}
-          >
-            Manage parks
-          </button>
-        </div>
-      </header>
+          )}
+        </section>
+      )}
 
-      <section className="content-section sync-section">
+      {page === 'home' && <section className="content-section sync-section">
         {!isSupabaseConfigured ? (
           <div className="sync-card warning">
             <span>☁️</span>
@@ -1011,9 +1087,9 @@ function App() {
             </div>
           </div>
         )}
-      </section>
+      </section>}
 
-      {parks.length === 0 && panel !== 'parks' && (
+      {page === 'home' && parks.length === 0 && (
         <section className="content-section onboarding">
           <span className="onboarding-icon">🎢</span>
           <div>
@@ -1024,23 +1100,51 @@ function App() {
           <button
             type="button"
             className="button button-primary"
-            onClick={() => setPanel('parks')}
+            onClick={() => setPage('parks')}
           >
             Add your first park
           </button>
         </section>
       )}
 
-      {panel === 'parks' && (
+      {page === 'home' && parks.length > 0 && (
+        <section className="content-section home-overview">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow dark">AT A GLANCE</p>
+              <h2>Your logbook</h2>
+            </div>
+          </div>
+          <div className="home-overview-grid">
+            <button type="button" onClick={() => setPage('visits')}>
+              <span>🎟️</span>
+              <strong>{visits.length}</strong>
+              <small>Saved visits</small>
+              <b>Open visits →</b>
+            </button>
+            <button type="button" onClick={() => setPage('parks')}>
+              <span>🎡</span>
+              <strong>{parks.length}</strong>
+              <small>Theme parks</small>
+              <b>Manage parks →</b>
+            </button>
+            <button type="button" onClick={() => setPage('stats')}>
+              <span>🎢</span>
+              <strong>{totalTimes(allEntries, categories)}</strong>
+              <small>Total experiences</small>
+              <b>View statistics →</b>
+            </button>
+          </div>
+        </section>
+      )}
+
+      {page === 'parks' && (
         <section className="content-section panel">
           <div className="section-heading">
             <div>
-              <p className="eyebrow dark">YOUR LIBRARY</p>
+              <p className="eyebrow dark">PARK DIRECTORY</p>
               <h2>Manage parks and attractions</h2>
             </div>
-            <button type="button" className="text-button" onClick={() => setPanel(null)}>
-              Close
-            </button>
           </div>
 
           <div className="import-card">
@@ -1330,7 +1434,7 @@ function App() {
         </section>
       )}
 
-      {panel === 'visit' && selectedPark && (
+      {page === 'visits' && visitEditorOpen && selectedPark && (
         <section className="content-section panel">
           <div className="section-heading">
             <div>
@@ -1477,7 +1581,7 @@ function App() {
         </section>
       )}
 
-      {panel === 'visit' && !selectedPark && (
+      {page === 'visits' && visitEditorOpen && !selectedPark && (
         <section className="content-section panel">
           <h2>Choose a park first</h2>
           <select
@@ -1495,6 +1599,8 @@ function App() {
         </section>
       )}
 
+      {page === 'stats' && (
+        <>
       <section className="content-section">
         <div className="section-heading">
           <div>
@@ -1590,8 +1696,10 @@ function App() {
           />
         </div>
       </section>
+        </>
+      )}
 
-      <section className="content-section">
+      {page === 'visits' && !visitEditorOpen && <section className="content-section">
         <div className="section-heading">
           <div>
             <p className="eyebrow dark">YOUR TIMELINE</p>
@@ -1651,7 +1759,7 @@ function App() {
             ))}
           </div>
         )}
-      </section>
+      </section>}
     </main>
   )
 }
