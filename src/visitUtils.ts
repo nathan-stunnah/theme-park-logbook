@@ -23,6 +23,20 @@ export type CoasterStatsEntry = {
   inversions?: number
 }
 
+export type RideLog = Omit<CoasterStatsEntry, 'times'> & {
+  id: string
+  riddenAt?: string
+  row?: string
+  seat?: string
+  timeOfDay?: 'day' | 'night'
+}
+
+export type VisitRideData = {
+  id: string
+  entries?: CoasterStatsEntry[]
+  rideLogs?: RideLog[]
+}
+
 export type CoasterAchievements = {
   trackKilometres: number
   trackMiles: number
@@ -38,6 +52,59 @@ export type CoasterAchievements = {
 
 export function isActiveVisit(visit: { status?: string }) {
   return visit.status === 'active'
+}
+
+export function readRideLogs(visit: VisitRideData): RideLog[] {
+  if (Array.isArray(visit.rideLogs)) return visit.rideLogs
+
+  return (visit.entries ?? []).flatMap((entry, entryIndex) =>
+    Array.from({ length: clampRideCount(entry.times) }, (_, index) => ({
+      id: `legacy:${visit.id}:${entryIndex + 1}:${entry.attractionId}:${index + 1}`,
+      attractionId: entry.attractionId,
+      name: entry.name,
+      category: entry.category,
+      trackLengthMetres: entry.trackLengthMetres,
+      topSpeedMph: entry.topSpeedMph,
+      inversions: entry.inversions,
+    })),
+  )
+}
+
+export function aggregateRideLogs(rideLogs: RideLog[]): CoasterStatsEntry[] {
+  return Array.from(
+    rideLogs.reduce((entries, rideLog) => {
+      const existing = entries.get(rideLog.attractionId)
+
+      entries.set(rideLog.attractionId, {
+        attractionId: rideLog.attractionId,
+        name: rideLog.name,
+        category: rideLog.category,
+        times: (existing?.times ?? 0) + 1,
+        ...(rideLog.trackLengthMetres === undefined
+          ? {}
+          : { trackLengthMetres: rideLog.trackLengthMetres }),
+        ...(rideLog.topSpeedMph === undefined
+          ? {}
+          : { topSpeedMph: rideLog.topSpeedMph }),
+        ...(rideLog.inversions === undefined
+          ? {}
+          : { inversions: rideLog.inversions }),
+      })
+
+      return entries
+    }, new Map<string, CoasterStatsEntry>()),
+  ).map(([, entry]) => entry)
+}
+
+export function getVisitEntries(visit: VisitRideData) {
+  return aggregateRideLogs(readRideLogs(visit))
+}
+
+export function countRideLogs(rideLogs: RideLog[]) {
+  return rideLogs.reduce<Record<string, number>>((counts, rideLog) => {
+    counts[rideLog.attractionId] = (counts[rideLog.attractionId] ?? 0) + 1
+    return counts
+  }, {})
 }
 
 export function clampRideCount(times: number) {

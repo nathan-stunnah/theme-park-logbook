@@ -2,10 +2,14 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   MAX_RIDE_COUNT,
+  aggregateRideLogs,
   calculateCoasterAchievements,
   calculateVisitDraftStats,
   clampRideCount,
+  countRideLogs,
+  getVisitEntries,
   isActiveVisit,
+  readRideLogs,
 } from '../src/visitUtils.ts'
 
 test('clampRideCount keeps the stepper inside its valid range', () => {
@@ -96,4 +100,74 @@ test('legacy visits without a status remain completed visits', () => {
   assert.equal(isActiveVisit({}), false)
   assert.equal(isActiveVisit({ status: 'completed' }), false)
   assert.equal(isActiveVisit({ status: 'active' }), true)
+})
+
+test('legacy aggregated entries are read as individual ride logs', () => {
+  const visit = {
+    id: 'visit-1',
+    entries: [
+      {
+        attractionId: 'coaster',
+        name: 'Legacy Coaster',
+        category: 'Rollercoaster',
+        times: 3,
+        inversions: 2,
+      },
+    ],
+  }
+
+  const rideLogs = readRideLogs(visit)
+
+  assert.equal(rideLogs.length, 3)
+  assert.deepEqual(
+    rideLogs.map((rideLog) => rideLog.id),
+    [
+      'legacy:visit-1:1:coaster:1',
+      'legacy:visit-1:1:coaster:2',
+      'legacy:visit-1:1:coaster:3',
+    ],
+  )
+  assert.deepEqual(countRideLogs(rideLogs), { coaster: 3 })
+  assert.deepEqual(getVisitEntries(visit), visit.entries)
+})
+
+test('individual ride logs remain authoritative when legacy entries also exist', () => {
+  const rideLogs = [
+    {
+      id: 'ride-1',
+      attractionId: 'coaster',
+      name: 'New Coaster',
+      category: 'Rollercoaster',
+      riddenAt: '2026-07-19T12:00:00.000Z',
+    },
+    {
+      id: 'ride-2',
+      attractionId: 'coaster',
+      name: 'New Coaster',
+      category: 'Rollercoaster',
+      riddenAt: '2026-07-19T13:00:00.000Z',
+    },
+  ]
+  const visit = {
+    id: 'visit-2',
+    entries: [
+      {
+        attractionId: 'coaster',
+        name: 'Old total',
+        category: 'Rollercoaster',
+        times: 99,
+      },
+    ],
+    rideLogs,
+  }
+
+  assert.deepEqual(readRideLogs(visit), rideLogs)
+  assert.deepEqual(aggregateRideLogs(rideLogs), [
+    {
+      attractionId: 'coaster',
+      name: 'New Coaster',
+      category: 'Rollercoaster',
+      times: 2,
+    },
+  ])
 })
