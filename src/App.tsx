@@ -11,8 +11,10 @@ import { PARK_IMPORTS } from './parkImports'
 import { isSupabaseConfigured, supabase } from './supabase'
 import {
   MAX_RIDE_COUNT,
+  calculateCoasterAchievements,
   calculateVisitDraftStats,
   clampRideCount,
+  type CoasterAchievements,
 } from './visitUtils'
 
 export type Category =
@@ -166,6 +168,14 @@ function formatDate(date: string) {
   }).format(new Date(`${date}T12:00:00`))
 }
 
+function getTodayDateInputValue() {
+  const today = new Date()
+  const month = String(today.getMonth() + 1).padStart(2, '0')
+  const day = String(today.getDate()).padStart(2, '0')
+
+  return `${today.getFullYear()}-${month}-${day}`
+}
+
 function formatSyncTime(date: string) {
   return new Intl.DateTimeFormat('en-GB', {
     day: 'numeric',
@@ -173,58 +183,6 @@ function formatSyncTime(date: string) {
     hour: '2-digit',
     minute: '2-digit',
   }).format(new Date(date))
-}
-
-type CoasterAchievements = {
-  trackKilometres: number
-  trackMiles: number
-  totalInversions: number
-  fastestCoaster: VisitEntry | null
-  mostRiddenCoaster?: {
-    name: string
-    total: number
-  }
-}
-
-function calculateCoasterAchievements(entries: VisitEntry[]): CoasterAchievements {
-  const coasterEntries = entries.filter(
-    (entry) => entry.category === 'Rollercoaster',
-  )
-  const totalTrackMetres = coasterEntries.reduce(
-    (total, entry) => total + (entry.trackLengthMetres ?? 0) * entry.times,
-    0,
-  )
-  const totalInversions = coasterEntries.reduce(
-    (total, entry) => total + (entry.inversions ?? 0) * entry.times,
-    0,
-  )
-  const fastestCoaster = coasterEntries.reduce<VisitEntry | null>(
-    (fastest, entry) =>
-      (entry.topSpeedMph ?? 0) > (fastest?.topSpeedMph ?? 0) ? entry : fastest,
-    null,
-  )
-  const coasterRideTotals = coasterEntries.reduce(
-    (totals, entry) => {
-      const existing = totals.get(entry.attractionId)
-      totals.set(entry.attractionId, {
-        name: entry.name,
-        total: (existing?.total ?? 0) + entry.times,
-      })
-      return totals
-    },
-    new Map<string, { name: string; total: number }>(),
-  )
-  const mostRiddenCoaster = Array.from(coasterRideTotals.values()).sort(
-    (first, second) => second.total - first.total,
-  )[0]
-
-  return {
-    trackKilometres: totalTrackMetres / 1000,
-    trackMiles: totalTrackMetres / 1609.344,
-    totalInversions,
-    fastestCoaster,
-    mostRiddenCoaster,
-  }
 }
 
 function AchievementCards({ stats }: { stats: CoasterAchievements }) {
@@ -255,6 +213,60 @@ function AchievementCards({ stats }: { stats: CoasterAchievements }) {
         <small>{stats.mostRiddenCoaster?.name ?? 'No coasters logged yet'}</small>
       </article>
     </div>
+  )
+}
+
+function formatVisitTrackDistance(trackKilometres: number) {
+  if (trackKilometres === 0) return '0 km'
+  if (trackKilometres < 1) return `${Math.round(trackKilometres * 1000)} m`
+  return `${trackKilometres.toFixed(1)} km`
+}
+
+function VisitFunStats({
+  entries,
+  live = false,
+}: {
+  entries: VisitEntry[]
+  live?: boolean
+}) {
+  const stats = calculateCoasterAchievements(entries)
+
+  return (
+    <section className="visit-fun-stats-section" aria-label="Fun stats for this visit">
+      <div className="visit-fun-stats-heading">
+        <span aria-hidden="true">✨</span>
+        <div>
+          <h4>Fun stats for this visit</h4>
+          <p>Calculated from the coaster details in your park library.</p>
+        </div>
+      </div>
+      <div className="visit-fun-stats" aria-live={live ? 'polite' : undefined}>
+        <article>
+          <span aria-hidden="true">🛤️</span>
+          <strong>{formatVisitTrackDistance(stats.trackKilometres)}</strong>
+          <small>Track travelled</small>
+          <em>{stats.trackMiles.toFixed(1)} miles</em>
+        </article>
+        <article>
+          <span aria-hidden="true">🌀</span>
+          <strong>{stats.totalInversions}</strong>
+          <small>Inversions</small>
+          <em>Across every coaster ride</em>
+        </article>
+        <article>
+          <span aria-hidden="true">⚡️</span>
+          <strong>{stats.fastestCoaster?.topSpeedMph ?? 0} mph</strong>
+          <small>Fastest coaster</small>
+          <em>{stats.fastestCoaster?.name ?? 'No speed recorded'}</em>
+        </article>
+        <article>
+          <span aria-hidden="true">🎢</span>
+          <strong>{stats.totalCoasterRides}</strong>
+          <small>Coaster rides</small>
+          <em>{stats.uniqueCoasters} unique coasters</em>
+        </article>
+      </div>
+    </section>
   )
 }
 
@@ -481,6 +493,31 @@ function App() {
       calculateVisitDraftStats(selectedPark?.attractions ?? [], rideCounts),
     [rideCounts, selectedPark],
   )
+  const visitDraftEntries = useMemo<VisitEntry[]>(() => {
+    if (!selectedPark) return []
+
+    const currentEntries = selectedPark.attractions
+      .filter((attraction) => (rideCounts[attraction.id] ?? 0) > 0)
+      .map((attraction) => ({
+        attractionId: attraction.id,
+        name: attraction.name,
+        category: attraction.category,
+        times: rideCounts[attraction.id],
+        trackLengthMetres: attraction.trackLengthMetres,
+        topSpeedMph: attraction.topSpeedMph,
+        inversions: attraction.inversions,
+      }))
+    const currentAttractionIds = new Set(
+      selectedPark.attractions.map((attraction) => attraction.id),
+    )
+    const historicalEntries = editingVisitId
+      ? (visits.find((visit) => visit.id === editingVisitId)?.entries ?? []).filter(
+          (entry) => !currentAttractionIds.has(entry.attractionId),
+        )
+      : []
+
+    return [...currentEntries, ...historicalEntries]
+  }, [editingVisitId, rideCounts, selectedPark, visits])
 
   const attractionLookup = useMemo(
     () =>
@@ -796,7 +833,7 @@ function App() {
 
   function openNewVisit() {
     setEditingVisitId(null)
-    setVisitDate('')
+    setVisitDate(getTodayDateInputValue())
     setRideCounts({})
     if (!visitParkId && parks[0]) setVisitParkId(parks[0].id)
     setPage('visits')
@@ -1508,6 +1545,8 @@ function App() {
                 </article>
               </section>
 
+              <VisitFunStats entries={visitDraftEntries} live />
+
               {selectedPark.attractions.length === 0 ? (
                 <p className="empty-copy">
                   This park has no attractions yet. You can still save the visit.
@@ -1755,6 +1794,7 @@ function App() {
                     ))}
                   </ul>
                 )}
+                <VisitFunStats entries={enrichEntries([visit])} />
               </article>
             ))}
           </div>
