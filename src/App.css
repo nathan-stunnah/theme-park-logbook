@@ -11,6 +11,7 @@
 
 .app-shell {
   min-height: 100vh;
+  min-height: 100dvh;
   color: var(--ink);
   background:
     radial-gradient(circle at 6% 27%, #ffe3a3 0 72px, transparent 73px),
@@ -238,6 +239,94 @@
 .sync-section {
   padding-top: 30px;
   padding-bottom: 30px;
+}
+
+.install-section {
+  padding-top: 0;
+  padding-bottom: 30px;
+}
+
+.install-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: center;
+  padding: 20px 22px;
+  color: white;
+  background: linear-gradient(120deg, #4c1d95, #7c3aed 58%, #db2777);
+  border-radius: 20px;
+  box-shadow: 0 14px 34px rgb(76 29 149 / 20%);
+}
+
+.install-icon {
+  display: grid;
+  width: 50px;
+  height: 50px;
+  place-items: center;
+  font-size: 1.75rem;
+  background: rgb(255 255 255 / 16%);
+  border: 1px solid rgb(255 255 255 / 22%);
+  border-radius: 15px;
+}
+
+.install-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.release-label {
+  font-size: 0.7rem;
+  font-weight: 950;
+  letter-spacing: 0.11em;
+  color: #fde047;
+}
+
+.install-copy strong {
+  font-size: 1.08rem;
+}
+
+.install-copy p {
+  margin: 0;
+  color: #f3e8ff;
+}
+
+.install-button {
+  white-space: nowrap;
+  color: #581c87;
+  background: #fde047;
+  box-shadow: 0 6px 0 #f59e0b;
+}
+
+.installed-badge {
+  padding: 8px 12px;
+  font-size: 0.8rem;
+  font-weight: 900;
+  color: #166534;
+  background: #dcfce7;
+  border-radius: 999px;
+}
+
+.install-instructions {
+  padding: 18px 22px;
+  margin: 10px 12px 0;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 0 0 16px 16px;
+  box-shadow: 0 10px 24px rgb(88 28 135 / 8%);
+}
+
+.install-instructions ol {
+  padding-left: 22px;
+  margin: 10px 0 0;
+}
+
+.install-instructions li + li {
+  margin-top: 6px;
+}
+
+.install-instructions p {
+  margin: 8px 0 0;
+  color: var(--muted);
 }
 
 .check-in-form {
@@ -1651,6 +1740,17 @@ select:focus {
 
   .sync-card {
     grid-template-columns: auto 1fr;
+  }
+
+  .install-card {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .install-button,
+  .installed-badge {
+    grid-column: 1 / -1;
+    justify-self: stretch;
+    text-align: center;
   }
 
   .sync-actions {

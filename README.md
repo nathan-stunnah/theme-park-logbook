@@ -1,75 +1,47 @@
-# React + TypeScript + Vite
+# Theme Park Logbook
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Theme Park Logbook is an installable, offline-ready web app for recording park visits, individual ride logs, seat coverage and lifetime statistics. Supabase provides private cross-device sync, while Vercel hosts the app.
 
-Currently, two official plugins are available:
+Live app: [theme-park-logbook.vercel.app](https://theme-park-logbook.vercel.app/)
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Install the free mobile app
 
-## React Compiler
+No app store or paid developer account is needed for this release.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### iPhone and iPad
 
-## Expanding the ESLint configuration
+1. Open the live app in Safari.
+2. Tap Share.
+3. Choose **Add to Home Screen**.
+4. Tap **Add**.
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+### Android
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+1. Open the live app in Chrome.
+2. Tap **Install app** when offered, or open the browser menu.
+3. Choose **Install app** or **Add to Home screen**.
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+The installed PWA opens full-screen from its own icon. The application shell and locally stored logbook remain available offline; cloud changes sync when Supabase and an internet connection are available.
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## Development
 
+```bash
+npm install
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Create `.env.local` from `.env.example` and provide the Supabase project URL and publishable key to enable cloud sync.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+Before publishing a release:
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```bash
+npm run release:check
 ```
+
+This runs the utility tests, linting, TypeScript compilation and the production PWA build. Vercel deploys updates from the connected GitHub repository.
+
+## Release approach
+
+Version 1.0 uses the existing Vercel deployment as the canonical mobile release. Its web app manifest, maskable icons, Apple touch icon, standalone display mode and generated service worker make it installable without maintaining separate iOS and Android projects.
+
+If store distribution becomes worthwhile later, the same web app can be evaluated for a thin native wrapper. That is intentionally deferred so the PWA can be tested with real park visits before taking on store accounts, review processes and platform-specific maintenance.
