@@ -8,6 +8,12 @@ import {
 import type { Session } from '@supabase/supabase-js'
 import './App.css'
 import { PARK_IMPORTS } from './parkImports'
+import {
+  calculateSeatCoverage,
+  getSeatKey,
+  type VehicleLayout,
+  type VehicleRow,
+} from './rideLayoutUtils'
 import { isSupabaseConfigured, supabase } from './supabase'
 import {
   MAX_RIDE_COUNT,
@@ -41,6 +47,7 @@ type Attraction = {
   source?: 'themeparks-wiki'
   sourceId?: string
   importedAt?: string
+  vehicleLayout?: VehicleLayout
 }
 
 type Park = {
@@ -71,7 +78,7 @@ type Visit = {
   checkedOutAt?: string
 }
 
-type Page = 'home' | 'visits' | 'parks' | 'stats'
+type Page = 'home' | 'visits' | 'parks' | 'rides' | 'stats'
 type AuthMode = 'sign-in' | 'sign-up'
 type SyncStatus = 'local' | 'loading' | 'saving' | 'synced' | 'error'
 
@@ -112,6 +119,7 @@ const navigationItems: Array<{ id: Page; label: string; icon: string }> = [
   { id: 'home', label: 'Home', icon: '🏠' },
   { id: 'visits', label: 'Visits', icon: '🎟️' },
   { id: 'parks', label: 'Parks', icon: '🎡' },
+  { id: 'rides', label: 'Rides', icon: '🎢' },
   { id: 'stats', label: 'Stats', icon: '📊' },
 ]
 
@@ -125,6 +133,11 @@ const pageDetails: Record<Exclude<Page, 'home'>, { eyebrow: string; title: strin
     eyebrow: 'YOUR LIBRARY',
     title: 'Parks and attractions',
     copy: 'Build the park and attraction lists you use when recording visits.',
+  },
+  rides: {
+    eyebrow: 'YOUR RIDE COLLECTION',
+    title: 'Rides',
+    copy: 'Open a ride profile, configure its vehicle and complete the seat map.',
   },
   stats: {
     eyebrow: 'YOUR ADVENTURE IN NUMBERS',
@@ -150,6 +163,12 @@ function readSavedData<T>(key: string): T[] {
 function sortAttractions(attractions: Attraction[]) {
   return [...attractions].sort((first, second) =>
     first.name.localeCompare(second.name, 'en-GB', { sensitivity: 'base' }),
+  )
+}
+
+function supportsVehicleLayout(attraction: Attraction) {
+  return (
+    attraction.category !== 'Scare Maze' && attraction.category !== 'Scare Zone'
   )
 }
 
@@ -184,6 +203,13 @@ function getTodayDateInputValue() {
   const day = String(today.getDate()).padStart(2, '0')
 
   return `${today.getFullYear()}-${month}-${day}`
+}
+
+function createVehicleRows(rowCount = 4, seatsPerRow = 4): VehicleRow[] {
+  return Array.from({ length: rowCount }, () => ({
+    id: crypto.randomUUID(),
+    seats: seatsPerRow,
+  }))
 }
 
 function getTimeOfDay(date: Date): RideLog['timeOfDay'] {
@@ -344,8 +370,61 @@ function RideBreakdownCards({
   )
 }
 
+function VehicleSeatMap({
+  rows,
+  rideLogs,
+}: {
+  rows: VehicleRow[]
+  rideLogs: RideLog[]
+}) {
+  const coverage = calculateSeatCoverage(rows, rideLogs)
+
+  return (
+    <section className="vehicle-map-panel" aria-label="Vehicle seat map">
+      <div className="vehicle-front" aria-hidden="true">
+        FRONT
+      </div>
+      <div className="vehicle-seat-map">
+        {rows.map((row, rowIndex) => (
+          <div className="vehicle-row" key={row.id}>
+            <strong>Row {rowIndex + 1}</strong>
+            <div className="vehicle-seats">
+              {Array.from({ length: row.seats }, (_, seatIndex) => {
+                const seatNumber = seatIndex + 1
+                const rideCount =
+                  coverage.seatCounts.get(getSeatKey(rowIndex + 1, seatNumber)) ?? 0
+                const fillClass =
+                  rideCount >= 3 ? ' frequent' : rideCount > 0 ? ' ridden' : ''
+
+                return (
+                  <span
+                    className={`vehicle-seat${fillClass}`}
+                    aria-label={`Row ${rowIndex + 1} seat ${seatNumber}, ridden ${rideCount} ${rideCount === 1 ? 'time' : 'times'}`}
+                    title={`Row ${rowIndex + 1}, seat ${seatNumber}: ${rideCount} rides`}
+                    key={seatNumber}
+                  >
+                    <b>{seatNumber}</b>
+                    {rideCount > 0 && <small>×{rideCount}</small>}
+                  </span>
+                )
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="seat-map-legend">
+        <span><i className="seat-swatch" /> Not ridden</span>
+        <span><i className="seat-swatch ridden" /> Ridden</span>
+        <span><i className="seat-swatch frequent" /> 3+ rides</span>
+      </div>
+    </section>
+  )
+}
+
 function App() {
   const [page, setPage] = useState<Page>('home')
+  const [selectedRideId, setSelectedRideId] = useState<string | null>(null)
+  const [layoutDraftRows, setLayoutDraftRows] = useState<VehicleRow[]>([])
   const [visitEditorOpen, setVisitEditorOpen] = useState(false)
   const [checkInOpen, setCheckInOpen] = useState(false)
   const [clockNow, setClockNow] = useState(() => new Date().toISOString())
@@ -486,7 +565,7 @@ function App() {
           {
             user_id: session.user.id,
             data: {
-              version: 3,
+              version: 4,
               parks,
               visits,
             },
@@ -596,6 +675,30 @@ function App() {
       ),
     [parks],
   )
+  const rideDirectory = parks.flatMap((park) =>
+    park.attractions
+      .filter(supportsVehicleLayout)
+      .map((attraction) => ({ park, attraction })),
+  )
+  const selectedRide = rideDirectory.find(
+    ({ attraction }) => attraction.id === selectedRideId,
+  )
+  const allRideLogs = visits.flatMap(readRideLogs)
+  const selectedRideLogs = selectedRide
+    ? allRideLogs.filter(
+        (rideLog) => rideLog.attractionId === selectedRide.attraction.id,
+      )
+    : []
+  const selectedSeatCoverage = calculateSeatCoverage(
+    layoutDraftRows,
+    selectedRideLogs,
+  )
+  const selectedRideDayCount = selectedRideLogs.filter(
+    (rideLog) => rideLog.timeOfDay === 'day',
+  ).length
+  const selectedRideNightCount = selectedRideLogs.filter(
+    (rideLog) => rideLog.timeOfDay === 'night',
+  ).length
 
   function getVisitDisplayEntries(visit: Visit) {
     return (getVisitEntries(visit) as VisitEntry[]).sort((first, second) =>
@@ -878,6 +981,90 @@ function App() {
     setTopSpeedMph(String(attraction.topSpeedMph ?? ''))
     setInversions(String(attraction.inversions ?? ''))
     setEditingAttraction({ parkId: park.id, attractionId: attraction.id })
+  }
+
+  function openRideDetails(attraction: Attraction) {
+    setSelectedRideId(attraction.id)
+    setLayoutDraftRows(
+      attraction.vehicleLayout?.rows.map((row) => ({ ...row })) ?? [],
+    )
+    setPage('rides')
+  }
+
+  function addVehicleRow() {
+    setLayoutDraftRows((currentRows) => [
+      ...currentRows,
+      {
+        id: crypto.randomUUID(),
+        seats: currentRows[currentRows.length - 1]?.seats ?? 4,
+      },
+    ])
+  }
+
+  function updateVehicleRowSeats(rowId: string, seats: number) {
+    const safeSeats = Math.min(20, Math.max(1, Math.trunc(seats) || 1))
+    setLayoutDraftRows((currentRows) =>
+      currentRows.map((row) =>
+        row.id === rowId ? { ...row, seats: safeSeats } : row,
+      ),
+    )
+  }
+
+  function removeVehicleRow(rowId: string) {
+    setLayoutDraftRows((currentRows) =>
+      currentRows.length > 1
+        ? currentRows.filter((row) => row.id !== rowId)
+        : currentRows,
+    )
+  }
+
+  function saveVehicleLayout() {
+    if (!selectedRide || layoutDraftRows.length === 0) return
+
+    setParks((currentParks) =>
+      currentParks.map((park) =>
+        park.id === selectedRide.park.id
+          ? {
+              ...park,
+              attractions: park.attractions.map((attraction) =>
+                attraction.id === selectedRide.attraction.id
+                  ? {
+                      ...attraction,
+                      vehicleLayout: {
+                        rows: layoutDraftRows.map((row) => ({ ...row })),
+                      },
+                    }
+                  : attraction,
+              ),
+            }
+          : park,
+      ),
+    )
+  }
+
+  function removeVehicleLayout() {
+    if (!selectedRide?.attraction.vehicleLayout) return
+    const confirmed = window.confirm(
+      `Remove the vehicle layout for ${selectedRide.attraction.name}? Ride logs and seat details will be kept.`,
+    )
+    if (!confirmed) return
+
+    setParks((currentParks) =>
+      currentParks.map((park) =>
+        park.id === selectedRide.park.id
+          ? {
+              ...park,
+              attractions: park.attractions.map((attraction) => {
+                if (attraction.id !== selectedRide.attraction.id) return attraction
+                const updatedAttraction = { ...attraction }
+                delete updatedAttraction.vehicleLayout
+                return updatedAttraction
+              }),
+            }
+          : park,
+      ),
+    )
+    setLayoutDraftRows([])
   }
 
   function handleSaveVisit(event: FormEvent<HTMLFormElement>) {
@@ -1165,7 +1352,10 @@ function App() {
               type="button"
               className={page === item.id ? 'active' : ''}
               aria-current={page === item.id ? 'page' : undefined}
-              onClick={() => setPage(item.id)}
+              onClick={() => {
+                setPage(item.id)
+                if (item.id === 'rides') setSelectedRideId(null)
+              }}
               key={item.id}
             >
               <span aria-hidden="true">{item.icon}</span>
@@ -1382,6 +1572,18 @@ function App() {
               <strong>{parks.length}</strong>
               <small>Theme parks</small>
               <b>Manage parks →</b>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedRideId(null)
+                setPage('rides')
+              }}
+            >
+              <span>🚃</span>
+              <strong>{rideDirectory.length}</strong>
+              <small>Ride profiles</small>
+              <b>Open rides →</b>
             </button>
             <button type="button" onClick={() => setPage('stats')}>
               <span>🎢</span>
@@ -1664,6 +1866,15 @@ function App() {
                           )}
                         </div>
                         <div className="library-actions">
+                          {supportsVehicleLayout(attraction) && (
+                            <button
+                              type="button"
+                              className="text-button"
+                              onClick={() => openRideDetails(attraction)}
+                            >
+                              Ride page
+                            </button>
+                          )}
                           <button
                             type="button"
                             className="text-button"
@@ -1687,6 +1898,216 @@ function App() {
             ))}
           </div>
         </section>
+      )}
+
+      {page === 'rides' && !selectedRide && (
+        <section className="content-section panel">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow dark">RIDE DIRECTORY</p>
+              <h2>Choose a ride</h2>
+              <p>
+                Every attraction has its own page for ride totals, vehicle setup and
+                seat-map progress.
+              </p>
+            </div>
+          </div>
+
+          {rideDirectory.length === 0 ? (
+            <div className="empty-state">
+              <span>🚃</span>
+              <p>Add attractions to your park library to create ride pages.</p>
+              <button
+                type="button"
+                className="button button-primary"
+                onClick={() => setPage('parks')}
+              >
+                Manage parks
+              </button>
+            </div>
+          ) : (
+            <div className="ride-directory-grid">
+              {rideDirectory.map(({ park, attraction }) => {
+                const attractionLogs = allRideLogs.filter(
+                  (rideLog) => rideLog.attractionId === attraction.id,
+                )
+                const layoutRows = attraction.vehicleLayout?.rows ?? []
+                const coverage = calculateSeatCoverage(layoutRows, attractionLogs)
+
+                return (
+                  <button
+                    type="button"
+                    className="ride-profile-card"
+                    onClick={() => openRideDetails(attraction)}
+                    key={`${park.id}:${attraction.id}`}
+                  >
+                    <span className="ride-profile-icon">
+                      {categoryIcons[attraction.category]}
+                    </span>
+                    <span className="ride-profile-copy">
+                      <small>{park.name}</small>
+                      <strong>{attraction.name}</strong>
+                      <em>{attraction.category}</em>
+                    </span>
+                    <span className="ride-profile-totals">
+                      <b>{attractionLogs.length} rides</b>
+                      <small>
+                        {layoutRows.length > 0
+                          ? `${coverage.uniqueSeatsRidden}/${coverage.totalSeats} seats`
+                          : 'Set up vehicle'}
+                      </small>
+                    </span>
+                    <span className="ride-profile-arrow" aria-hidden="true">→</span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </section>
+      )}
+
+      {page === 'rides' && selectedRide && (
+        <>
+          <section className="content-section ride-detail-hero">
+            <button
+              type="button"
+              className="text-button ride-back-button"
+              onClick={() => setSelectedRideId(null)}
+            >
+              ← All rides
+            </button>
+            <div className="ride-detail-title">
+              <span>{categoryIcons[selectedRide.attraction.category]}</span>
+              <div>
+                <p className="eyebrow dark">{selectedRide.park.name}</p>
+                <h2>{selectedRide.attraction.name}</h2>
+                <p>{selectedRide.attraction.category}</p>
+              </div>
+            </div>
+            <div className="ride-profile-stats" aria-label="Ride profile statistics">
+              <article>
+                <strong>{selectedRideLogs.length}</strong>
+                <small>Total rides</small>
+              </article>
+              <article>
+                <strong>{selectedSeatCoverage.uniqueSeatsRidden}</strong>
+                <small>Seats ridden</small>
+              </article>
+              <article>
+                <strong>{selectedSeatCoverage.coveragePercent.toFixed(0)}%</strong>
+                <small>Seat coverage</small>
+              </article>
+              <article>
+                <strong>{selectedRideDayCount} / {selectedRideNightCount}</strong>
+                <small>Day / night</small>
+              </article>
+            </div>
+          </section>
+
+          {layoutDraftRows.length === 0 ? (
+            <section className="content-section vehicle-empty-state">
+              <span>🚃</span>
+              <div>
+                <p className="eyebrow dark">VEHICLE LAYOUT</p>
+                <h3>Build this ride’s seat map</h3>
+                <p>
+                  Start with a four-row vehicle, then change the number of seats in
+                  each row to match the real train or ride car.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="button button-primary"
+                onClick={() => setLayoutDraftRows(createVehicleRows())}
+              >
+                Create 4 × 4 layout
+              </button>
+            </section>
+          ) : (
+            <section className="content-section ride-layout-workspace">
+              <div className="vehicle-map-section">
+                <div className="section-heading compact">
+                  <div>
+                    <p className="eyebrow dark">SEAT PROGRESS</p>
+                    <h3>Vehicle seat map</h3>
+                  </div>
+                  <strong className="coverage-pill">
+                    {selectedSeatCoverage.uniqueSeatsRidden} of{' '}
+                    {selectedSeatCoverage.totalSeats} seats
+                  </strong>
+                </div>
+                <VehicleSeatMap rows={layoutDraftRows} rideLogs={selectedRideLogs} />
+                {selectedSeatCoverage.unmappedRideLogs > 0 && (
+                  <p className="layout-warning">
+                    {selectedSeatCoverage.unmappedRideLogs} ride{' '}
+                    {selectedSeatCoverage.unmappedRideLogs === 1 ? 'log has' : 'logs have'}{' '}
+                    a row or seat outside this layout. Adjust the vehicle or edit the
+                    visit details to place them.
+                  </p>
+                )}
+              </div>
+
+              <aside className="vehicle-layout-editor">
+                <div>
+                  <p className="eyebrow dark">CONFIGURE VEHICLE</p>
+                  <h3>Rows and seats</h3>
+                  <p>Each row can have a different number of seats.</p>
+                </div>
+                <div className="vehicle-row-editor-list">
+                  {layoutDraftRows.map((row, index) => (
+                    <div className="vehicle-row-editor" key={row.id}>
+                      <label>
+                        Row {index + 1} seats
+                        <input
+                          type="number"
+                          min="1"
+                          max="20"
+                          step="1"
+                          value={row.seats}
+                          onChange={(event) =>
+                            updateVehicleRowSeats(row.id, Number(event.target.value))
+                          }
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        className="delete-link"
+                        onClick={() => removeVehicleRow(row.id)}
+                        disabled={layoutDraftRows.length === 1}
+                        aria-label={`Remove row ${index + 1}`}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  className="button button-secondary add-row-button"
+                  onClick={addVehicleRow}
+                >
+                  Add row
+                </button>
+                <button
+                  type="button"
+                  className="button button-primary"
+                  onClick={saveVehicleLayout}
+                >
+                  Save vehicle layout
+                </button>
+                {selectedRide.attraction.vehicleLayout && (
+                  <button
+                    type="button"
+                    className="delete-link remove-layout-button"
+                    onClick={removeVehicleLayout}
+                  >
+                    Remove vehicle layout
+                  </button>
+                )}
+              </aside>
+            </section>
+          )}
+        </>
       )}
 
       {page === 'visits' && checkInOpen && (
