@@ -5,6 +5,7 @@ import {
   calculateCoasterAchievements,
   calculateVisitDraftStats,
   clampRideCount,
+  isActiveVisit,
 } from '../src/visitUtils.ts'
 
 test('clampRideCount keeps the stepper inside its valid range', () => {
@@ -89,4 +90,10 @@ test('calculateCoasterAchievements multiplies ride specifications by ride count'
   assert.equal(stats.uniqueCoasters, 2)
   assert.equal(stats.fastestCoaster?.name, 'Coaster A')
   assert.deepEqual(stats.mostRiddenCoaster, { name: 'Coaster A', total: 2 })
+})
+
+test('legacy visits without a status remain completed visits', () => {
+  assert.equal(isActiveVisit({}), false)
+  assert.equal(isActiveVisit({ status: 'completed' }), false)
+  assert.equal(isActiveVisit({ status: 'active' }), true)
 })

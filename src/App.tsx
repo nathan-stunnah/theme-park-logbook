@@ -14,6 +14,7 @@ import {
   calculateCoasterAchievements,
   calculateVisitDraftStats,
   clampRideCount,
+  isActiveVisit,
   type CoasterAchievements,
 } from './visitUtils'
 
@@ -59,6 +60,9 @@ type Visit = {
   parkName: string
   date: string
   entries: VisitEntry[]
+  status?: 'active' | 'completed'
+  checkedInAt?: string
+  checkedOutAt?: string
 }
 
 type Page = 'home' | 'visits' | 'parks' | 'stats'
@@ -174,6 +178,25 @@ function getTodayDateInputValue() {
   const day = String(today.getDate()).padStart(2, '0')
 
   return `${today.getFullYear()}-${month}-${day}`
+}
+
+function formatVisitTime(date: string) {
+  return new Intl.DateTimeFormat('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(date))
+}
+
+function formatVisitDuration(start: string, end: string) {
+  const totalMinutes = Math.max(
+    0,
+    Math.floor((new Date(end).getTime() - new Date(start).getTime()) / 60000),
+  )
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+
+  if (hours === 0) return `${minutes} min`
+  return `${hours} hr ${minutes} min`
 }
 
 function formatSyncTime(date: string) {
@@ -298,6 +321,8 @@ function RideBreakdownCards({
 function App() {
   const [page, setPage] = useState<Page>('home')
   const [visitEditorOpen, setVisitEditorOpen] = useState(false)
+  const [checkInOpen, setCheckInOpen] = useState(false)
+  const [clockNow, setClockNow] = useState(() => new Date().toISOString())
   const [selectedYear, setSelectedYear] = useState(currentYear)
 
   const [parks, setParks] = useState<Park[]>(() =>
@@ -339,6 +364,20 @@ function App() {
   const [visitDate, setVisitDate] = useState('')
   const [rideCounts, setRideCounts] = useState<Record<string, number>>({})
   const [editingVisitId, setEditingVisitId] = useState<string | null>(null)
+  const activeVisit = visits.find(isActiveVisit)
+  const activeVisitId = activeVisit?.id
+  const completedVisits = visits.filter((visit) => !isActiveVisit(visit))
+
+  useEffect(() => {
+    if (!activeVisitId) return
+
+    const timer = window.setInterval(
+      () => setClockNow(new Date().toISOString()),
+      60_000,
+    )
+
+    return () => window.clearInterval(timer)
+  }, [activeVisitId])
 
   useEffect(() => {
     localStorage.setItem('theme-park-parks-v2', JSON.stringify(parks))
@@ -421,7 +460,7 @@ function App() {
           {
             user_id: session.user.id,
             data: {
-              version: 1,
+              version: 2,
               parks,
               visits,
             },
@@ -488,6 +527,7 @@ function App() {
   }
 
   const selectedPark = parks.find((park) => park.id === visitParkId)
+  const editingActiveVisit = editingVisitId === activeVisit?.id
   const visitDraftStats = useMemo(
     () =>
       calculateVisitDraftStats(selectedPark?.attractions ?? [], rideCounts),
@@ -547,6 +587,28 @@ function App() {
   }
 
   const allEntries = enrichEntries(visits)
+  const activeEntries = activeVisit ? enrichEntries([activeVisit]) : []
+  const activeVisitStats = {
+    totalExperiences: activeEntries.reduce(
+      (total, entry) => total + entry.times,
+      0,
+    ),
+    uniqueAttractions: new Set(
+      activeEntries.map((entry) => entry.attractionId),
+    ).size,
+    rideExperiences: activeEntries
+      .filter(
+        (entry) =>
+          entry.category !== 'Scare Maze' && entry.category !== 'Scare Zone',
+      )
+      .reduce((total, entry) => total + entry.times, 0),
+    scareExperiences: activeEntries
+      .filter(
+        (entry) =>
+          entry.category === 'Scare Maze' || entry.category === 'Scare Zone',
+      )
+      .reduce((total, entry) => total + entry.times, 0),
+  }
 
   const availableYears = useMemo(
     () =>
@@ -814,11 +876,13 @@ function App() {
     )
 
     const newVisit: Visit = {
+      ...originalVisit,
       id: editingVisitId ?? crypto.randomUUID(),
       parkId: selectedPark.id,
       parkName: selectedPark.name,
       date: visitDate,
       entries,
+      status: originalVisit?.status ?? 'completed',
     }
 
     setVisits((currentVisits) =>
@@ -837,7 +901,45 @@ function App() {
     setRideCounts({})
     if (!visitParkId && parks[0]) setVisitParkId(parks[0].id)
     setPage('visits')
+    setCheckInOpen(false)
     setVisitEditorOpen(true)
+  }
+
+  function openCheckIn() {
+    if (activeVisit) {
+      setPage('visits')
+      setCheckInOpen(false)
+      setVisitEditorOpen(false)
+      return
+    }
+
+    setEditingVisitId(null)
+    setRideCounts({})
+    setVisitDate(getTodayDateInputValue())
+    if (!visitParkId && parks[0]) setVisitParkId(parks[0].id)
+    setPage('visits')
+    setVisitEditorOpen(false)
+    setCheckInOpen(true)
+  }
+
+  function handleCheckIn(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!selectedPark || activeVisit) return
+
+    const checkedInAt = new Date().toISOString()
+    const newVisit: Visit = {
+      id: crypto.randomUUID(),
+      parkId: selectedPark.id,
+      parkName: selectedPark.name,
+      date: getTodayDateInputValue(),
+      entries: [],
+      status: 'active',
+      checkedInAt,
+    }
+
+    setVisits((currentVisits) => [newVisit, ...currentVisits])
+    setClockNow(checkedInAt)
+    setCheckInOpen(false)
   }
 
   function startEditingVisit(visit: Visit) {
@@ -859,6 +961,7 @@ function App() {
       ),
     )
     setPage('visits')
+    setCheckInOpen(false)
     setVisitEditorOpen(true)
   }
 
@@ -867,6 +970,26 @@ function App() {
     setVisitDate('')
     setRideCounts({})
     setVisitEditorOpen(false)
+  }
+
+  function checkoutActiveVisit() {
+    if (!activeVisit) return
+
+    const confirmed = window.confirm(
+      `Check out of ${activeVisit.parkName}? You can still edit this visit later.`,
+    )
+    if (!confirmed) return
+
+    const checkedOutAt = new Date().toISOString()
+    setVisits((currentVisits) =>
+      currentVisits.map((visit) =>
+        visit.id === activeVisit.id
+          ? { ...visit, status: 'completed', checkedOutAt }
+          : visit,
+      ),
+    )
+    setVisitEditorOpen(false)
+    setCheckInOpen(false)
   }
 
   function setAttractionSelected(attractionId: string, selected: boolean) {
@@ -987,10 +1110,18 @@ function App() {
             <button
               type="button"
               className="button button-primary"
-              onClick={openNewVisit}
+              onClick={() => {
+                if (activeVisit) {
+                  setPage('visits')
+                  setVisitEditorOpen(false)
+                  setCheckInOpen(false)
+                } else {
+                  openCheckIn()
+                }
+              }}
               disabled={parks.length === 0}
             >
-              Log a visit
+              {activeVisit ? 'View active visit' : 'Check in to a park'}
             </button>
             <button
               type="button"
@@ -1011,14 +1142,26 @@ function App() {
             <p>{pageDetails[page].copy}</p>
           </div>
           {page === 'visits' && (
-          <button
-            type="button"
-            className="button button-primary"
-            onClick={openNewVisit}
-            disabled={parks.length === 0}
-          >
-            New visit
-          </button>
+            <div className="page-header-actions">
+              <button
+                type="button"
+                className="button button-primary"
+                onClick={() =>
+                  activeVisit ? startEditingVisit(activeVisit) : openCheckIn()
+                }
+                disabled={parks.length === 0}
+              >
+                {activeVisit ? 'Log rides' : 'Check in'}
+              </button>
+              <button
+                type="button"
+                className="button button-secondary"
+                onClick={openNewVisit}
+                disabled={parks.length === 0}
+              >
+                Log past visit
+              </button>
+            </div>
           )}
         </section>
       )}
@@ -1471,14 +1614,129 @@ function App() {
         </section>
       )}
 
+      {page === 'visits' && checkInOpen && (
+        <section className="content-section panel check-in-panel">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow dark">START YOUR PARK DAY</p>
+              <h2>Check in</h2>
+            </div>
+            <button
+              type="button"
+              className="text-button"
+              onClick={() => setCheckInOpen(false)}
+            >
+              Cancel
+            </button>
+          </div>
+          <form className="check-in-form" onSubmit={handleCheckIn}>
+            <label>
+              Which park are you visiting?
+              <select
+                value={visitParkId}
+                onChange={(event) => setVisitParkId(event.target.value)}
+                required
+              >
+                <option value="">Choose a park</option>
+                {parks.map((park) => (
+                  <option key={park.id} value={park.id}>
+                    {park.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="check-in-note">
+              <span aria-hidden="true">📍</span>
+              <div>
+                <strong>Your visit starts now</strong>
+                <p>
+                  Log rides throughout the day, then check out when you leave.
+                </p>
+              </div>
+            </div>
+            <button className="button button-primary" type="submit">
+              Check in now
+            </button>
+          </form>
+        </section>
+      )}
+
+      {page === 'visits' && !visitEditorOpen && !checkInOpen && activeVisit && (
+        <section className="content-section active-visit-card">
+          <div className="active-visit-heading">
+            <div>
+              <span className="live-pill">LIVE VISIT</span>
+              <h2>{activeVisit.parkName}</h2>
+              <p>{formatDate(activeVisit.date)}</p>
+              {activeVisit.checkedInAt && (
+                <p className="active-visit-time">
+                  Checked in at {formatVisitTime(activeVisit.checkedInAt)} ·{' '}
+                  {formatVisitDuration(activeVisit.checkedInAt, clockNow)} so far
+                </p>
+              )}
+            </div>
+            <div className="active-visit-actions">
+              <button
+                type="button"
+                className="button button-primary"
+                onClick={() => startEditingVisit(activeVisit)}
+              >
+                Log rides
+              </button>
+              <button
+                type="button"
+                className="button checkout-button"
+                onClick={checkoutActiveVisit}
+              >
+                Check out
+              </button>
+            </div>
+          </div>
+
+          <section className="visit-live-stats" aria-label="Active visit statistics">
+            <article>
+              <span>🎟️</span>
+              <strong>{activeVisitStats.totalExperiences}</strong>
+              <small>Total experiences</small>
+            </article>
+            <article>
+              <span>✨</span>
+              <strong>{activeVisitStats.uniqueAttractions}</strong>
+              <small>Unique attractions</small>
+            </article>
+            <article>
+              <span>🎢</span>
+              <strong>{activeVisitStats.rideExperiences}</strong>
+              <small>Ride experiences</small>
+            </article>
+            <article>
+              <span>🎃</span>
+              <strong>{activeVisitStats.scareExperiences}</strong>
+              <small>Scare experiences</small>
+            </article>
+          </section>
+          <VisitFunStats entries={activeEntries} live />
+        </section>
+      )}
+
       {page === 'visits' && visitEditorOpen && selectedPark && (
         <section className="content-section panel">
           <div className="section-heading">
             <div>
               <p className="eyebrow dark">
-                {editingVisitId ? 'UPDATE ENTRY' : 'NEW ENTRY'}
+                {editingActiveVisit
+                  ? 'ACTIVE VISIT'
+                  : editingVisitId
+                    ? 'UPDATE ENTRY'
+                    : 'NEW ENTRY'}
               </p>
-              <h2>{editingVisitId ? 'Edit park visit' : 'Log a park visit'}</h2>
+              <h2>
+                {editingActiveVisit
+                  ? `Log rides at ${selectedPark.name}`
+                  : editingVisitId
+                    ? 'Edit park visit'
+                    : 'Log a park visit'}
+              </h2>
             </div>
             <button type="button" className="text-button" onClick={closeVisitPanel}>
               Cancel
@@ -1614,7 +1872,11 @@ function App() {
             </div>
 
             <button className="button button-primary save-visit" type="submit">
-              {editingVisitId ? 'Update visit' : 'Save visit'}
+              {editingActiveVisit
+                ? 'Save ride updates'
+                : editingVisitId
+                  ? 'Update visit'
+                  : 'Save visit'}
             </button>
           </form>
         </section>
@@ -1738,7 +2000,7 @@ function App() {
         </>
       )}
 
-      {page === 'visits' && !visitEditorOpen && <section className="content-section">
+      {page === 'visits' && !visitEditorOpen && !checkInOpen && <section className="content-section">
         <div className="section-heading">
           <div>
             <p className="eyebrow dark">YOUR TIMELINE</p>
@@ -1746,19 +2008,29 @@ function App() {
           </div>
         </div>
 
-        {visits.length === 0 ? (
+        {completedVisits.length === 0 ? (
           <div className="empty-state">
             <span>🎫</span>
-            <p>Your saved visits will appear here.</p>
+            <p>Your completed visits will appear here.</p>
           </div>
         ) : (
           <div className="visit-history">
-            {visits.map((visit) => (
+            {completedVisits.map((visit) => (
               <article className="visit-card" key={visit.id}>
                 <div className="visit-card-heading">
                   <div>
                     <h3>{visit.parkName}</h3>
                     <p>{formatDate(visit.date)}</p>
+                    {visit.checkedInAt && visit.checkedOutAt && (
+                      <small className="visit-session-duration">
+                        {formatVisitTime(visit.checkedInAt)}–
+                        {formatVisitTime(visit.checkedOutAt)} ·{' '}
+                        {formatVisitDuration(
+                          visit.checkedInAt,
+                          visit.checkedOutAt,
+                        )}
+                      </small>
+                    )}
                   </div>
                   <div className="visit-card-actions">
                     <button
