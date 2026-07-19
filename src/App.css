@@ -951,6 +951,78 @@ select:focus {
   font-weight: 900;
 }
 
+.ride-log-details {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 10px;
+  padding-top: 4px;
+  border-top: 1px solid #e9d5ff;
+}
+
+.ride-log-details-heading {
+  display: flex;
+  gap: 8px 16px;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.ride-log-details-heading small {
+  color: var(--muted);
+}
+
+.ride-log-card {
+  min-width: 0;
+  padding: 12px;
+  background: rgb(255 255 255 / 72%);
+  border: 1px solid #e9d5ff;
+  border-radius: 13px;
+}
+
+.ride-log-card legend {
+  padding: 0 5px;
+  color: #581c87;
+  font-weight: 900;
+}
+
+.ride-log-card legend span {
+  margin-left: 8px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.ride-log-fields {
+  display: grid;
+  grid-template-columns: minmax(80px, 0.7fr) minmax(80px, 0.7fr) minmax(130px, 1fr);
+  gap: 10px;
+}
+
+.ride-log-fields label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  font-size: 0.76rem;
+  font-weight: 850;
+}
+
+.ride-log-fields input,
+.ride-log-fields select {
+  padding: 9px 10px;
+  font-size: 0.9rem;
+}
+
+.ride-log-summary-list {
+  display: grid;
+  gap: 3px;
+  margin-top: 7px;
+}
+
+.visit-entry-list .ride-log-summary-list span {
+  color: #6b21a8;
+  font-size: 0.72rem;
+  font-weight: 750;
+}
+
 .save-visit {
   justify-self: start;
 }
@@ -1244,5 +1316,18 @@ select:focus {
 
   .ride-checkbox {
     grid-template-columns: auto 1fr;
+  }
+
+  .ride-log-details-heading {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .ride-log-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ride-log-fields label:last-child {
+    grid-column: 1 / -1;
   }
 }
