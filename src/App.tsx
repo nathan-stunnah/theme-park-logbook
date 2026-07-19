@@ -7,6 +7,7 @@ import {
 } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import './App.css'
+import PwaInstallCard from './PwaInstallCard'
 import { PARK_IMPORTS } from './parkImports'
 import {
   calculateSeatCoverage,
@@ -1533,6 +1534,8 @@ function App() {
           </div>
         )}
       </section>}
+
+      {page === 'home' && <PwaInstallCard />}
 
       {page === 'home' && parks.length === 0 && (
         <section className="content-section onboarding">

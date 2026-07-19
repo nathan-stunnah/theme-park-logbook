@@ -27,6 +27,7 @@ export default defineConfig({
         scope: '/',
         orientation: 'any',
         categories: ['entertainment', 'lifestyle', 'travel'],
+        prefer_related_applications: false,
         icons: [
           {
             src: 'pwa-64x64.png',

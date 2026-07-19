@@ -1,13 +1,14 @@
 {
   "name": "theme-park-logbook",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "test": "node --test tests/visitUtils.test.ts",
+    "test": "node --test tests/*.test.ts",
+    "release:check": "npm run test && npm run lint && npm run build",
     "preview": "vite preview"
   },
   "dependencies": {
