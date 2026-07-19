@@ -9,6 +9,11 @@ import type { Session } from '@supabase/supabase-js'
 import './App.css'
 import { PARK_IMPORTS } from './parkImports'
 import { isSupabaseConfigured, supabase } from './supabase'
+import {
+  MAX_RIDE_COUNT,
+  calculateVisitDraftStats,
+  clampRideCount,
+} from './visitUtils'
 
 export type Category =
   | 'Rollercoaster'
@@ -445,6 +450,11 @@ function App() {
   }
 
   const selectedPark = parks.find((park) => park.id === visitParkId)
+  const visitDraftStats = useMemo(
+    () =>
+      calculateVisitDraftStats(selectedPark?.attractions ?? [], rideCounts),
+    [rideCounts, selectedPark],
+  )
 
   const attractionLookup = useMemo(
     () =>
@@ -804,7 +814,7 @@ function App() {
   function setAttractionCount(attractionId: string, times: number) {
     setRideCounts((currentCounts) => ({
       ...currentCounts,
-      [attractionId]: Math.max(1, times),
+      [attractionId]: clampRideCount(times),
     }))
   }
 
@@ -1368,8 +1378,31 @@ function App() {
             <div className="ride-selector">
               <div>
                 <h3>What did you experience?</h3>
-                <p>Select attractions and enter how many times you did each one.</p>
+                <p>Select attractions and use the counters as you go.</p>
               </div>
+
+              <section className="visit-live-stats" aria-label="Live visit statistics">
+                <article>
+                  <span>🎟️</span>
+                  <strong aria-live="polite">{visitDraftStats.totalExperiences}</strong>
+                  <small>Total experiences</small>
+                </article>
+                <article>
+                  <span>✨</span>
+                  <strong>{visitDraftStats.uniqueAttractions}</strong>
+                  <small>Unique attractions</small>
+                </article>
+                <article>
+                  <span>🎢</span>
+                  <strong>{visitDraftStats.rideExperiences}</strong>
+                  <small>Ride experiences</small>
+                </article>
+                <article>
+                  <span>🎃</span>
+                  <strong>{visitDraftStats.scareExperiences}</strong>
+                  <small>Scare experiences</small>
+                </article>
+              </section>
 
               {selectedPark.attractions.length === 0 ? (
                 <p className="empty-copy">
@@ -1396,19 +1429,40 @@ function App() {
                             <small>{attraction.category}</small>
                           </span>
                         </label>
-                        <label className="times-field">
-                          Times
-                          <input
-                            type="number"
-                            min="1"
-                            max="999"
-                            value={selected ? rideCounts[attraction.id] : 1}
-                            disabled={!selected}
-                            onChange={(event) =>
-                              setAttractionCount(attraction.id, Number(event.target.value))
-                            }
-                          />
-                        </label>
+                        <div className="times-field">
+                          <span>Times</span>
+                          <div className="ride-stepper" role="group" aria-label={`Times ridden on ${attraction.name}`}>
+                            <button
+                              type="button"
+                              aria-label={`Decrease times ridden on ${attraction.name}`}
+                              disabled={!selected}
+                              onClick={() =>
+                                setAttractionCount(
+                                  attraction.id,
+                                  (rideCounts[attraction.id] ?? 0) - 1,
+                                )
+                              }
+                            >
+                              −
+                            </button>
+                            <output aria-live="polite" aria-label="Times ridden">
+                              {rideCounts[attraction.id] ?? 0}
+                            </output>
+                            <button
+                              type="button"
+                              aria-label={`Increase times ridden on ${attraction.name}`}
+                              disabled={(rideCounts[attraction.id] ?? 0) >= MAX_RIDE_COUNT}
+                              onClick={() =>
+                                setAttractionCount(
+                                  attraction.id,
+                                  (rideCounts[attraction.id] ?? 0) + 1,
+                                )
+                              }
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     )
                   })}

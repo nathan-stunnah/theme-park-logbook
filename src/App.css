@@ -537,6 +537,30 @@ select:focus {
   gap: 10px;
 }
 
+.visit-live-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.visit-live-stats article {
+  display: grid;
+  gap: 3px;
+  padding: 14px;
+  background: #fffaf3;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+
+.visit-live-stats strong {
+  font-size: 1.35rem;
+}
+
+.visit-live-stats small {
+  color: var(--muted);
+  font-weight: 700;
+}
+
 .ride-row {
   display: grid;
   grid-template-columns: 1fr 100px;
@@ -582,8 +606,39 @@ select:focus {
   font-size: 0.78rem;
 }
 
-.times-field input {
-  padding: 9px;
+.ride-stepper {
+  display: grid;
+  grid-template-columns: 32px minmax(32px, 1fr) 32px;
+  align-items: center;
+  overflow: hidden;
+  min-height: 40px;
+  background: #fffaf3;
+  border: 2px solid #e9d5ff;
+  border-radius: 11px;
+}
+
+.ride-stepper button {
+  align-self: stretch;
+  padding: 0;
+  color: #5b21b6;
+  font: inherit;
+  font-size: 1.2rem;
+  font-weight: 900;
+  background: #f3e8ff;
+  border: 0;
+  cursor: pointer;
+}
+
+.ride-stepper button:disabled {
+  color: #b8acbd;
+  background: #f3eff3;
+  cursor: not-allowed;
+}
+
+.ride-stepper output {
+  text-align: center;
+  font-size: 1rem;
+  font-weight: 900;
 }
 
 .save-visit {
@@ -790,6 +845,10 @@ select:focus {
     grid-template-columns: repeat(2, 1fr);
   }
 
+  .visit-live-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .coaster-fields {
     grid-template-columns: 1fr;
   }
@@ -810,7 +869,7 @@ select:focus {
   }
 
   .ride-row {
-    grid-template-columns: 1fr 76px;
+    grid-template-columns: minmax(0, 1fr) 108px;
     gap: 10px;
   }
 
