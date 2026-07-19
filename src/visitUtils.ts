@@ -36,6 +36,10 @@ export type CoasterAchievements = {
   }
 }
 
+export function isActiveVisit(visit: { status?: string }) {
+  return visit.status === 'active'
+}
+
 export function clampRideCount(times: number) {
   if (!Number.isFinite(times)) return MIN_RIDE_COUNT
 

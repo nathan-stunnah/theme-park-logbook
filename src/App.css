@@ -102,6 +102,13 @@
   font-size: 1.05rem;
 }
 
+.page-header-actions,
+.active-visit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
 .hero {
   padding: 72px 24px;
   text-align: center;
@@ -231,6 +238,103 @@
 .sync-section {
   padding-top: 30px;
   padding-bottom: 30px;
+}
+
+.check-in-form {
+  display: grid;
+  gap: 18px;
+  max-width: 620px;
+  padding: 24px;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+}
+
+.check-in-form > label {
+  display: grid;
+  gap: 8px;
+  font-weight: 850;
+}
+
+.check-in-form .button {
+  justify-self: start;
+}
+
+.check-in-note {
+  display: flex;
+  gap: 12px;
+  align-items: start;
+  padding: 16px;
+  background: #faf5ff;
+  border-radius: 14px;
+}
+
+.check-in-note > span {
+  font-size: 1.5rem;
+}
+
+.check-in-note p {
+  margin: 4px 0 0;
+  color: var(--muted);
+}
+
+.active-visit-card {
+  display: grid;
+  gap: 20px;
+  padding: 28px;
+  margin-top: 30px;
+  margin-bottom: 30px;
+  background: white;
+  border: 2px solid #c084fc;
+  border-radius: 24px;
+  box-shadow: 0 18px 44px rgb(88 28 135 / 14%);
+}
+
+.active-visit-heading {
+  display: flex;
+  gap: 20px;
+  align-items: start;
+  justify-content: space-between;
+}
+
+.active-visit-heading h2 {
+  margin: 12px 0 4px;
+  font-size: clamp(1.8rem, 5vw, 3rem);
+}
+
+.active-visit-heading p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.active-visit-heading .active-visit-time {
+  margin-top: 7px;
+  color: #6b21a8;
+  font-weight: 800;
+}
+
+.live-pill {
+  display: inline-block;
+  padding: 7px 10px;
+  color: #166534;
+  font-size: 0.72rem;
+  font-weight: 950;
+  letter-spacing: 0.12em;
+  background: #dcfce7;
+  border-radius: 999px;
+}
+
+.checkout-button {
+  color: #991b1b;
+  background: #fee2e2;
+  box-shadow: 0 7px 0 #fca5a5;
+}
+
+.visit-session-duration {
+  display: block;
+  margin-top: 4px;
+  color: #6b21a8;
+  font-weight: 750;
 }
 
 .sync-card,
@@ -1041,6 +1145,16 @@ select:focus {
     align-items: stretch;
     flex-direction: column;
     padding-top: 38px;
+  }
+
+  .page-header-actions,
+  .active-visit-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .active-visit-heading {
+    flex-direction: column;
   }
 
   .hero {
