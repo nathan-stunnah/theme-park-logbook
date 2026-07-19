@@ -11,11 +11,16 @@ import { PARK_IMPORTS } from './parkImports'
 import { isSupabaseConfigured, supabase } from './supabase'
 import {
   MAX_RIDE_COUNT,
+  aggregateRideLogs,
   calculateCoasterAchievements,
   calculateVisitDraftStats,
   clampRideCount,
+  countRideLogs,
+  getVisitEntries,
   isActiveVisit,
+  readRideLogs,
   type CoasterAchievements,
+  type RideLog,
 } from './visitUtils'
 
 export type Category =
@@ -59,7 +64,8 @@ type Visit = {
   parkId: string
   parkName: string
   date: string
-  entries: VisitEntry[]
+  entries?: VisitEntry[]
+  rideLogs?: RideLog[]
   status?: 'active' | 'completed'
   checkedInAt?: string
   checkedOutAt?: string
@@ -362,7 +368,7 @@ function App() {
 
   const [visitParkId, setVisitParkId] = useState('')
   const [visitDate, setVisitDate] = useState('')
-  const [rideCounts, setRideCounts] = useState<Record<string, number>>({})
+  const [draftRideLogs, setDraftRideLogs] = useState<RideLog[]>([])
   const [editingVisitId, setEditingVisitId] = useState<string | null>(null)
   const activeVisit = visits.find(isActiveVisit)
   const activeVisitId = activeVisit?.id
@@ -460,7 +466,7 @@ function App() {
           {
             user_id: session.user.id,
             data: {
-              version: 2,
+              version: 3,
               parks,
               visits,
             },
@@ -528,36 +534,38 @@ function App() {
 
   const selectedPark = parks.find((park) => park.id === visitParkId)
   const editingActiveVisit = editingVisitId === activeVisit?.id
+  const rideCounts = useMemo(
+    () => countRideLogs(draftRideLogs),
+    [draftRideLogs],
+  )
   const visitDraftStats = useMemo(
     () =>
       calculateVisitDraftStats(selectedPark?.attractions ?? [], rideCounts),
     [rideCounts, selectedPark],
   )
   const visitDraftEntries = useMemo<VisitEntry[]>(() => {
-    if (!selectedPark) return []
-
-    const currentEntries = selectedPark.attractions
-      .filter((attraction) => (rideCounts[attraction.id] ?? 0) > 0)
-      .map((attraction) => ({
-        attractionId: attraction.id,
-        name: attraction.name,
-        category: attraction.category,
-        times: rideCounts[attraction.id],
-        trackLengthMetres: attraction.trackLengthMetres,
-        topSpeedMph: attraction.topSpeedMph,
-        inversions: attraction.inversions,
-      }))
-    const currentAttractionIds = new Set(
-      selectedPark.attractions.map((attraction) => attraction.id),
+    const currentAttractions = new Map(
+      (selectedPark?.attractions ?? []).map((attraction) => [
+        attraction.id,
+        attraction,
+      ]),
     )
-    const historicalEntries = editingVisitId
-      ? (visits.find((visit) => visit.id === editingVisitId)?.entries ?? []).filter(
-          (entry) => !currentAttractionIds.has(entry.attractionId),
-        )
-      : []
 
-    return [...currentEntries, ...historicalEntries]
-  }, [editingVisitId, rideCounts, selectedPark, visits])
+    return (aggregateRideLogs(draftRideLogs) as VisitEntry[]).map((entry) => {
+      const currentAttraction = currentAttractions.get(entry.attractionId)
+
+      return currentAttraction
+        ? {
+            ...entry,
+            name: currentAttraction.name,
+            category: currentAttraction.category,
+            trackLengthMetres: currentAttraction.trackLengthMetres,
+            topSpeedMph: currentAttraction.topSpeedMph,
+            inversions: currentAttraction.inversions,
+          }
+        : entry
+    })
+  }, [draftRideLogs, selectedPark])
 
   const attractionLookup = useMemo(
     () =>
@@ -569,9 +577,15 @@ function App() {
     [parks],
   )
 
+  function getVisitDisplayEntries(visit: Visit) {
+    return (getVisitEntries(visit) as VisitEntry[]).sort((first, second) =>
+      first.name.localeCompare(second.name, 'en-GB', { sensitivity: 'base' }),
+    )
+  }
+
   function enrichEntries(selectedVisits: Visit[]) {
     return selectedVisits.flatMap((visit) =>
-      visit.entries.map((entry) => {
+      getVisitDisplayEntries(visit).map((entry) => {
         const currentAttraction = attractionLookup.get(entry.attractionId)
 
         if (!currentAttraction) return entry
@@ -851,39 +865,36 @@ function App() {
 
     if (!selectedPark || !visitDate) return
 
-    const selectedEntries: VisitEntry[] = sortAttractions(selectedPark.attractions)
-      .filter((attraction) => (rideCounts[attraction.id] ?? 0) > 0)
-      .map((attraction) => ({
-        attractionId: attraction.id,
-        name: attraction.name,
-        category: attraction.category,
-        times: rideCounts[attraction.id],
-        trackLengthMetres: attraction.trackLengthMetres,
-        topSpeedMph: attraction.topSpeedMph,
-        inversions: attraction.inversions,
-      }))
     const originalVisit = editingVisitId
       ? visits.find((visit) => visit.id === editingVisitId)
       : undefined
-    const currentAttractionIds = new Set(
-      selectedPark.attractions.map((attraction) => attraction.id),
+    const selectedParkAttractions = new Map(
+      selectedPark.attractions.map((attraction) => [attraction.id, attraction]),
     )
-    const historicalEntries = (originalVisit?.entries ?? []).filter(
-      (entry) => !currentAttractionIds.has(entry.attractionId),
-    )
-    const entries = [...selectedEntries, ...historicalEntries].sort((first, second) =>
-      first.name.localeCompare(second.name, 'en-GB', { sensitivity: 'base' }),
-    )
+    const rideLogs = draftRideLogs.map((rideLog) => {
+      const currentAttraction = selectedParkAttractions.get(rideLog.attractionId)
 
+      return currentAttraction
+        ? {
+            ...rideLog,
+            name: currentAttraction.name,
+            category: currentAttraction.category,
+            trackLengthMetres: currentAttraction.trackLengthMetres,
+            topSpeedMph: currentAttraction.topSpeedMph,
+            inversions: currentAttraction.inversions,
+          }
+        : rideLog
+    })
     const newVisit: Visit = {
       ...originalVisit,
       id: editingVisitId ?? crypto.randomUUID(),
       parkId: selectedPark.id,
       parkName: selectedPark.name,
       date: visitDate,
-      entries,
+      rideLogs,
       status: originalVisit?.status ?? 'completed',
     }
+    delete newVisit.entries
 
     setVisits((currentVisits) =>
       editingVisitId
@@ -898,7 +909,7 @@ function App() {
   function openNewVisit() {
     setEditingVisitId(null)
     setVisitDate(getTodayDateInputValue())
-    setRideCounts({})
+    setDraftRideLogs([])
     if (!visitParkId && parks[0]) setVisitParkId(parks[0].id)
     setPage('visits')
     setCheckInOpen(false)
@@ -914,7 +925,7 @@ function App() {
     }
 
     setEditingVisitId(null)
-    setRideCounts({})
+    setDraftRideLogs([])
     setVisitDate(getTodayDateInputValue())
     if (!visitParkId && parks[0]) setVisitParkId(parks[0].id)
     setPage('visits')
@@ -932,7 +943,7 @@ function App() {
       parkId: selectedPark.id,
       parkName: selectedPark.name,
       date: getTodayDateInputValue(),
-      entries: [],
+      rideLogs: [],
       status: 'active',
       checkedInAt,
     }
@@ -955,11 +966,7 @@ function App() {
     setEditingVisitId(visit.id)
     setVisitParkId(visit.parkId)
     setVisitDate(visit.date)
-    setRideCounts(
-      Object.fromEntries(
-        visit.entries.map((entry) => [entry.attractionId, entry.times]),
-      ),
-    )
+    setDraftRideLogs(readRideLogs(visit))
     setPage('visits')
     setCheckInOpen(false)
     setVisitEditorOpen(true)
@@ -968,7 +975,7 @@ function App() {
   function closeVisitPanel() {
     setEditingVisitId(null)
     setVisitDate('')
-    setRideCounts({})
+    setDraftRideLogs([])
     setVisitEditorOpen(false)
   }
 
@@ -993,17 +1000,45 @@ function App() {
   }
 
   function setAttractionSelected(attractionId: string, selected: boolean) {
-    setRideCounts((currentCounts) => ({
-      ...currentCounts,
-      [attractionId]: selected ? Math.max(currentCounts[attractionId] ?? 1, 1) : 0,
-    }))
+    setAttractionCount(attractionId, selected ? Math.max(rideCounts[attractionId] ?? 1, 1) : 0)
   }
 
   function setAttractionCount(attractionId: string, times: number) {
-    setRideCounts((currentCounts) => ({
-      ...currentCounts,
-      [attractionId]: clampRideCount(times),
-    }))
+    const attraction = selectedPark?.attractions.find(
+      (item) => item.id === attractionId,
+    )
+    if (!attraction) return
+
+    const nextCount = clampRideCount(times)
+
+    setDraftRideLogs((currentRideLogs) => {
+      const matchingLogs = currentRideLogs.filter(
+        (rideLog) => rideLog.attractionId === attractionId,
+      )
+      const otherLogs = currentRideLogs.filter(
+        (rideLog) => rideLog.attractionId !== attractionId,
+      )
+
+      if (nextCount <= matchingLogs.length) {
+        return [...otherLogs, ...matchingLogs.slice(0, nextCount)]
+      }
+
+      const additions = Array.from(
+        { length: nextCount - matchingLogs.length },
+        (): RideLog => ({
+          id: crypto.randomUUID(),
+          attractionId: attraction.id,
+          name: attraction.name,
+          category: attraction.category,
+          trackLengthMetres: attraction.trackLengthMetres,
+          topSpeedMph: attraction.topSpeedMph,
+          inversions: attraction.inversions,
+          ...(editingActiveVisit ? { riddenAt: new Date().toISOString() } : {}),
+        }),
+      )
+
+      return [...otherLogs, ...matchingLogs, ...additions]
+    })
   }
 
   function deleteVisit(id: string) {
@@ -1751,7 +1786,7 @@ function App() {
                   value={visitParkId}
                   onChange={(event) => {
                     setVisitParkId(event.target.value)
-                    setRideCounts({})
+                    setDraftRideLogs([])
                   }}
                   disabled={Boolean(editingVisitId)}
                   required
@@ -2050,11 +2085,11 @@ function App() {
                   </div>
                 </div>
 
-                {visit.entries.length === 0 ? (
+                {getVisitDisplayEntries(visit).length === 0 ? (
                   <p className="empty-copy">No attractions recorded for this visit.</p>
                 ) : (
                   <ul className="visit-entry-list">
-                    {visit.entries.map((entry) => (
+                    {getVisitDisplayEntries(visit).map((entry) => (
                       <li key={entry.attractionId}>
                         <span>{categoryIcons[entry.category]}</span>
                         <div>
