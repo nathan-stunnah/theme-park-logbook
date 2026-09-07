@@ -1866,3 +1866,42 @@ select:focus {
     grid-column: 1 / -1;
   }
 }
+.retired-option {
+  display: flex !important;
+  grid-template-columns: none !important;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.9rem 1rem;
+  border: 2px solid #ffb45f;
+  border-radius: 14px;
+  background: #fff5df;
+  font-weight: 800;
+}
+
+.retired-option input {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+.field-help {
+  color: #687989;
+  margin-top: -0.55rem;
+}
+
+.archive-section {
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 2px solid #c8bbed;
+  border-radius: 16px;
+  background: #f3efff;
+}
+
+.archive-section summary {
+  cursor: pointer;
+  color: #5844b5;
+  font-weight: 900;
+}
+
+.archive-section .attraction-library-list {
+  margin-top: 1rem;
+}
