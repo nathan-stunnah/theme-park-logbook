@@ -9,12 +9,6 @@ import type { Session } from '@supabase/supabase-js'
 import './App.css'
 import PwaInstallCard from './PwaInstallCard'
 import { PARK_IMPORTS } from './parkImports'
-import {
-  calculateSeatCoverage,
-  getSeatKey,
-  type VehicleLayout,
-  type VehicleRow,
-} from './rideLayoutUtils'
 import { isSupabaseConfigured, supabase } from './supabase'
 import {
   MAX_RIDE_COUNT,
@@ -34,9 +28,12 @@ export type Category =
   | 'Rollercoaster'
   | 'Flat Ride'
   | 'Dark Ride'
+  | 'Water Ride'
+  | 'Family Ride'
+  | 'Show/Attraction'
   | 'Scare Maze'
   | 'Scare Zone'
-  | 'Other'
+  | 'Scare Attraction'
 
 type Attraction = {
   id: string
@@ -45,10 +42,10 @@ type Attraction = {
   trackLengthMetres?: number
   topSpeedMph?: number
   inversions?: number
-  source?: 'themeparks-wiki'
+  source?: 'rcdb'
   sourceId?: string
   importedAt?: string
-  vehicleLayout?: VehicleLayout
+  retired?: boolean
 }
 
 type Park = {
@@ -102,18 +99,24 @@ const categories: Category[] = [
   'Rollercoaster',
   'Flat Ride',
   'Dark Ride',
+  'Water Ride',
+  'Family Ride',
+  'Show/Attraction',
   'Scare Maze',
   'Scare Zone',
-  'Other',
+  'Scare Attraction',
 ]
 
 const categoryIcons: Record<Category, string> = {
   Rollercoaster: '🎢',
   'Flat Ride': '🎠',
   'Dark Ride': '👻',
+  'Water Ride': '🌊',
+  'Family Ride': '🎈',
+  'Show/Attraction': '🎭',
   'Scare Maze': '🎃',
   'Scare Zone': '🧟',
-  Other: '🎪',
+  'Scare Attraction': '💀',
 }
 
 const navigationItems: Array<{ id: Page; label: string; icon: string }> = [
@@ -138,7 +141,7 @@ const pageDetails: Record<Exclude<Page, 'home'>, { eyebrow: string; title: strin
   rides: {
     eyebrow: 'YOUR RIDE COLLECTION',
     title: 'Rides',
-    copy: 'Open a ride profile, configure its vehicle and complete the seat map.',
+    copy: 'Open an attraction profile and see your total experiences.',
   },
   stats: {
     eyebrow: 'YOUR ADVENTURE IN NUMBERS',
@@ -167,10 +170,27 @@ function sortAttractions(attractions: Attraction[]) {
   )
 }
 
-function supportsVehicleLayout(attraction: Attraction) {
-  return (
-    attraction.category !== 'Scare Maze' && attraction.category !== 'Scare Zone'
-  )
+const DATA_VERSION = 5
+
+function createPreloadedParks(): Park[] {
+  return PARK_IMPORTS.map((definition) => ({
+    id: `rcdb-park-${definition.key}`,
+    name: definition.name,
+    attractions: Object.entries(definition.overrides).map(([name, details], index) => ({
+      id: `rcdb-${definition.key}-${index}`,
+      name,
+      ...details,
+      source: 'rcdb' as const,
+      sourceId: `${definition.key}-${index}`,
+      importedAt: new Date().toISOString(),
+      retired: false,
+    })),
+  }))
+}
+
+function readInitialParks() {
+  const saved = readSavedData<Park>('theme-park-parks-v5')
+  return saved.length ? saved : createPreloadedParks()
 }
 
 function totalTimes(entries: VisitEntry[], selectedCategories: Category[]) {
@@ -206,28 +226,9 @@ function getTodayDateInputValue() {
   return `${today.getFullYear()}-${month}-${day}`
 }
 
-function createVehicleRows(rowCount = 4, seatsPerRow = 4): VehicleRow[] {
-  return Array.from({ length: rowCount }, () => ({
-    id: crypto.randomUUID(),
-    seats: seatsPerRow,
-  }))
-}
-
-function getTimeOfDay(date: Date): RideLog['timeOfDay'] {
-  const hour = date.getHours()
-  return hour >= 7 && hour < 19 ? 'day' : 'night'
-}
-
 function formatRideLogSummary(rideLog: RideLog) {
   return [
     rideLog.riddenAt ? formatVisitTime(rideLog.riddenAt) : null,
-    rideLog.timeOfDay === 'day'
-      ? 'Day'
-      : rideLog.timeOfDay === 'night'
-        ? 'Night'
-        : null,
-    rideLog.row ? `Row ${rideLog.row}` : null,
-    rideLog.seat ? `Seat ${rideLog.seat}` : null,
   ]
     .filter(Boolean)
     .join(' · ')
@@ -371,72 +372,18 @@ function RideBreakdownCards({
   )
 }
 
-function VehicleSeatMap({
-  rows,
-  rideLogs,
-}: {
-  rows: VehicleRow[]
-  rideLogs: RideLog[]
-}) {
-  const coverage = calculateSeatCoverage(rows, rideLogs)
-
-  return (
-    <section className="vehicle-map-panel" aria-label="Vehicle seat map">
-      <div className="vehicle-front" aria-hidden="true">
-        FRONT
-      </div>
-      <div className="vehicle-seat-map">
-        {rows.map((row, rowIndex) => (
-          <div className="vehicle-row" key={row.id}>
-            <strong>Row {rowIndex + 1}</strong>
-            <div className="vehicle-seats">
-              {Array.from({ length: row.seats }, (_, seatIndex) => {
-                const seatNumber = seatIndex + 1
-                const rideCount =
-                  coverage.seatCounts.get(getSeatKey(rowIndex + 1, seatNumber)) ?? 0
-                const fillClass =
-                  rideCount >= 3 ? ' frequent' : rideCount > 0 ? ' ridden' : ''
-
-                return (
-                  <span
-                    className={`vehicle-seat${fillClass}`}
-                    aria-label={`Row ${rowIndex + 1} seat ${seatNumber}, ridden ${rideCount} ${rideCount === 1 ? 'time' : 'times'}`}
-                    title={`Row ${rowIndex + 1}, seat ${seatNumber}: ${rideCount} rides`}
-                    key={seatNumber}
-                  >
-                    <b>{seatNumber}</b>
-                    {rideCount > 0 && <small>×{rideCount}</small>}
-                  </span>
-                )
-              })}
-            </div>
-          </div>
-        ))}
-      </div>
-      <div className="seat-map-legend">
-        <span><i className="seat-swatch" /> Not ridden</span>
-        <span><i className="seat-swatch ridden" /> Ridden</span>
-        <span><i className="seat-swatch frequent" /> 3+ rides</span>
-      </div>
-    </section>
-  )
-}
-
 function App() {
   const [page, setPage] = useState<Page>('home')
   const [selectedRideId, setSelectedRideId] = useState<string | null>(null)
-  const [layoutDraftRows, setLayoutDraftRows] = useState<VehicleRow[]>([])
   const [visitEditorOpen, setVisitEditorOpen] = useState(false)
   const [checkInOpen, setCheckInOpen] = useState(false)
   const [clockNow, setClockNow] = useState(() => new Date().toISOString())
   const [selectedYear, setSelectedYear] = useState(currentYear)
   const [expandedVisits, setExpandedVisits] = useState<Set<string>>(new Set())
 
-  const [parks, setParks] = useState<Park[]>(() =>
-    readSavedData<Park>('theme-park-parks-v2'),
-  )
+  const [parks, setParks] = useState<Park[]>(readInitialParks)
   const [visits, setVisits] = useState<Visit[]>(() =>
-    readSavedData<Visit>('theme-park-visits-v2'),
+    readSavedData<Visit>('theme-park-visits-v5'),
   )
   const [session, setSession] = useState<Session | null>(null)
   const [authReady, setAuthReady] = useState(!supabase)
@@ -457,6 +404,7 @@ function App() {
   const [trackLengthMetres, setTrackLengthMetres] = useState('')
   const [topSpeedMph, setTopSpeedMph] = useState('')
   const [inversions, setInversions] = useState('')
+  const [attractionRetired, setAttractionRetired] = useState(false)
   const [editingAttraction, setEditingAttraction] = useState<{
     parkId: string
     attractionId: string
@@ -464,7 +412,6 @@ function App() {
   const [importParkKey, setImportParkKey] = useState(PARK_IMPORTS[0].key)
   const [importCandidates, setImportCandidates] = useState<ImportCandidate[]>([])
   const [selectedImports, setSelectedImports] = useState<Record<string, boolean>>({})
-  const [importLoading, setImportLoading] = useState(false)
   const [importMessage, setImportMessage] = useState('')
 
   const [visitParkId, setVisitParkId] = useState('')
@@ -487,11 +434,11 @@ function App() {
   }, [activeVisitId])
 
   useEffect(() => {
-    localStorage.setItem('theme-park-parks-v2', JSON.stringify(parks))
+    localStorage.setItem('theme-park-parks-v5', JSON.stringify(parks))
   }, [parks])
 
   useEffect(() => {
-    localStorage.setItem('theme-park-visits-v2', JSON.stringify(visits))
+    localStorage.setItem('theme-park-visits-v5', JSON.stringify(visits))
   }, [visits])
 
   useEffect(() => {
@@ -535,14 +482,18 @@ function App() {
 
     const cloudData = row?.data as CloudData | undefined
 
-    if (cloudData) {
+    if (cloudData && cloudData.version >= DATA_VERSION) {
       setParks(Array.isArray(cloudData.parks) ? cloudData.parks : [])
       setVisits(Array.isArray(cloudData.visits) ? cloudData.visits : [])
       if (row?.updated_at) setLastSyncedAt(row.updated_at as string)
+    } else {
+      setParks(createPreloadedParks())
+      setVisits([])
+      setAuthMessage('Your previous synced logbook data has been cleared.')
     }
 
     setCloudLoaded(true)
-    setSyncStatus(cloudData ? 'synced' : 'saving')
+    setSyncStatus((cloudData?.version ?? 0) >= DATA_VERSION ? 'synced' : 'saving')
   }, [])
 
   useEffect(() => {
@@ -567,7 +518,7 @@ function App() {
           {
             user_id: session.user.id,
             data: {
-              version: 4,
+              version: DATA_VERSION,
               parks,
               visits,
             },
@@ -679,7 +630,7 @@ function App() {
   )
   const rideDirectory = parks.flatMap((park) =>
     park.attractions
-      .filter(supportsVehicleLayout)
+      .filter((attraction) => !attraction.retired)
       .map((attraction) => ({ park, attraction })),
   )
   const selectedRide = rideDirectory.find(
@@ -691,16 +642,6 @@ function App() {
         (rideLog) => rideLog.attractionId === selectedRide.attraction.id,
       )
     : []
-  const selectedSeatCoverage = calculateSeatCoverage(
-    layoutDraftRows,
-    selectedRideLogs,
-  )
-  const selectedRideDayCount = selectedRideLogs.filter(
-    (rideLog) => rideLog.timeOfDay === 'day',
-  ).length
-  const selectedRideNightCount = selectedRideLogs.filter(
-    (rideLog) => rideLog.timeOfDay === 'night',
-  ).length
 
   function getVisitDisplayEntries(visit: Visit) {
     return (getVisitEntries(visit) as VisitEntry[]).sort((first, second) =>
@@ -811,6 +752,7 @@ function App() {
         newAttractionCategory === 'Rollercoaster' && inversions
           ? Number(inversions)
           : undefined,
+      retired: attractionRetired,
     }
 
     setParks((currentParks) =>
@@ -838,44 +780,17 @@ function App() {
     resetAttractionForm()
   }
 
-  async function loadImportPreview() {
+  function loadImportPreview() {
     const definition = PARK_IMPORTS.find((park) => park.key === importParkKey)
     if (!definition) return
 
-    setImportLoading(true)
     setImportMessage('')
-
-    try {
-      const response = await fetch(
-        `https://api.themeparks.wiki/v1/entity/${definition.entityId}/children`,
-      )
-
-      if (!response.ok) {
-        throw new Error(`The attraction service returned ${response.status}.`)
-      }
-
-      const result = (await response.json()) as {
-        children?: Array<{
-          id: string
-          name: string
-          entityType: string
-        }>
-      }
-
-      const candidates = (result.children ?? [])
-        .filter((child) => child.entityType === 'ATTRACTION')
-        .map((child): ImportCandidate => {
-          const override = definition.overrides[child.name]
-
-          return {
-            sourceId: child.id,
-            name: child.name,
-            category: override?.category ?? 'Other',
-            trackLengthMetres: override?.trackLengthMetres,
-            topSpeedMph: override?.topSpeedMph,
-            inversions: override?.inversions,
-          }
-        })
+    const candidates = Object.entries(definition.overrides)
+        .map(([name, override], index): ImportCandidate => ({
+          sourceId: `${definition.key}-${index}`,
+          name,
+          ...override,
+        }))
         .sort((first, second) =>
           first.name.localeCompare(second.name, 'en-GB', { sensitivity: 'base' }),
         )
@@ -885,19 +800,8 @@ function App() {
         Object.fromEntries(candidates.map((candidate) => [candidate.sourceId, true])),
       )
       setImportMessage(
-        `${candidates.length} current attractions found. Review the list before importing.`,
+        `${candidates.length} RCDB rollercoasters found. Review the list before importing.`,
       )
-    } catch (error) {
-      setImportCandidates([])
-      setSelectedImports({})
-      setImportMessage(
-        error instanceof Error
-          ? error.message
-          : 'The attraction list could not be loaded.',
-      )
-    } finally {
-      setImportLoading(false)
-    }
   }
 
   function importSelectedAttractions() {
@@ -931,9 +835,10 @@ function App() {
         trackLengthMetres: candidate.trackLengthMetres,
         topSpeedMph: candidate.topSpeedMph,
         inversions: candidate.inversions,
-        source: 'themeparks-wiki',
+        source: 'rcdb',
         sourceId: candidate.sourceId,
         importedAt,
+        retired: false,
       }))
 
     if (existingPark) {
@@ -972,6 +877,7 @@ function App() {
     setTrackLengthMetres('')
     setTopSpeedMph('')
     setInversions('')
+    setAttractionRetired(false)
     setEditingAttraction(null)
   }
 
@@ -982,91 +888,13 @@ function App() {
     setTrackLengthMetres(String(attraction.trackLengthMetres ?? ''))
     setTopSpeedMph(String(attraction.topSpeedMph ?? ''))
     setInversions(String(attraction.inversions ?? ''))
+    setAttractionRetired(Boolean(attraction.retired))
     setEditingAttraction({ parkId: park.id, attractionId: attraction.id })
   }
 
   function openRideDetails(attraction: Attraction) {
     setSelectedRideId(attraction.id)
-    setLayoutDraftRows(
-      attraction.vehicleLayout?.rows.map((row) => ({ ...row })) ?? [],
-    )
     setPage('rides')
-  }
-
-  function addVehicleRow() {
-    setLayoutDraftRows((currentRows) => [
-      ...currentRows,
-      {
-        id: crypto.randomUUID(),
-        seats: currentRows[currentRows.length - 1]?.seats ?? 4,
-      },
-    ])
-  }
-
-  function updateVehicleRowSeats(rowId: string, seats: number) {
-    const safeSeats = Math.min(20, Math.max(1, Math.trunc(seats) || 1))
-    setLayoutDraftRows((currentRows) =>
-      currentRows.map((row) =>
-        row.id === rowId ? { ...row, seats: safeSeats } : row,
-      ),
-    )
-  }
-
-  function removeVehicleRow(rowId: string) {
-    setLayoutDraftRows((currentRows) =>
-      currentRows.length > 1
-        ? currentRows.filter((row) => row.id !== rowId)
-        : currentRows,
-    )
-  }
-
-  function saveVehicleLayout() {
-    if (!selectedRide || layoutDraftRows.length === 0) return
-
-    setParks((currentParks) =>
-      currentParks.map((park) =>
-        park.id === selectedRide.park.id
-          ? {
-              ...park,
-              attractions: park.attractions.map((attraction) =>
-                attraction.id === selectedRide.attraction.id
-                  ? {
-                      ...attraction,
-                      vehicleLayout: {
-                        rows: layoutDraftRows.map((row) => ({ ...row })),
-                      },
-                    }
-                  : attraction,
-              ),
-            }
-          : park,
-      ),
-    )
-  }
-
-  function removeVehicleLayout() {
-    if (!selectedRide?.attraction.vehicleLayout) return
-    const confirmed = window.confirm(
-      `Remove the vehicle layout for ${selectedRide.attraction.name}? Ride logs and seat details will be kept.`,
-    )
-    if (!confirmed) return
-
-    setParks((currentParks) =>
-      currentParks.map((park) =>
-        park.id === selectedRide.park.id
-          ? {
-              ...park,
-              attractions: park.attractions.map((attraction) => {
-                if (attraction.id !== selectedRide.attraction.id) return attraction
-                const updatedAttraction = { ...attraction }
-                delete updatedAttraction.vehicleLayout
-                return updatedAttraction
-              }),
-            }
-          : park,
-      ),
-    )
-    setLayoutDraftRows([])
   }
 
   function handleSaveVisit(event: FormEvent<HTMLFormElement>) {
@@ -1257,29 +1085,13 @@ function App() {
             trackLengthMetres: attraction.trackLengthMetres,
             topSpeedMph: attraction.topSpeedMph,
             inversions: attraction.inversions,
-            ...(editingActiveVisit
-              ? {
-                  riddenAt: loggedAt.toISOString(),
-                  timeOfDay: getTimeOfDay(loggedAt),
-                }
-              : {}),
+            ...(editingActiveVisit ? { riddenAt: loggedAt.toISOString() } : {}),
           }
         },
       )
 
       return [...otherLogs, ...matchingLogs, ...additions]
     })
-  }
-
-  function updateRideLogDetails(
-    rideLogId: string,
-    details: Partial<Pick<RideLog, 'row' | 'seat' | 'timeOfDay'>>,
-  ) {
-    setDraftRideLogs((currentRideLogs) =>
-      currentRideLogs.map((rideLog) =>
-        rideLog.id === rideLogId ? { ...rideLog, ...details } : rideLog,
-      ),
-    )
   }
 
   function deleteVisit(id: string) {
@@ -1339,8 +1151,8 @@ function App() {
   }
 
   const coasterCategories: Category[] = ['Rollercoaster']
-  const rideCategories: Category[] = ['Flat Ride', 'Dark Ride', 'Other']
-  const scareCategories: Category[] = ['Scare Maze', 'Scare Zone']
+  const rideCategories: Category[] = ['Flat Ride', 'Dark Ride', 'Water Ride', 'Family Ride', 'Show/Attraction']
+  const scareCategories: Category[] = ['Scare Maze', 'Scare Zone', 'Scare Attraction']
 
   const allTimeAchievements = calculateCoasterAchievements(allEntries)
   const yearlyAchievements = calculateCoasterAchievements(yearlyEntries)
@@ -1626,12 +1438,12 @@ function App() {
                 <p className="eyebrow dark">QUICK START</p>
                 <h3>Import a current park catalogue</h3>
                 <p>
-                  Attraction names come from ThemeParks.wiki. Categories and coaster
-                  specifications are curated starting points and remain fully editable.
+                  Operating rollercoasters are preloaded from RCDB. Every entry remains
+                  fully editable and can be retired into the archive.
                 </p>
               </div>
               <a
-                href="https://api.themeparks.wiki/docs/v1/"
+                href={PARK_IMPORTS.find((park) => park.key === importParkKey)?.rcdbUrl}
                 target="_blank"
                 rel="noreferrer"
               >
@@ -1662,9 +1474,8 @@ function App() {
                 type="button"
                 className="button button-secondary"
                 onClick={loadImportPreview}
-                disabled={importLoading}
               >
-                {importLoading ? 'Loading…' : 'Load attraction list'}
+                Load rollercoaster list
               </button>
             </div>
 
@@ -1828,6 +1639,17 @@ function App() {
                   </label>
                 </div>
               )}
+              <label className="retired-option">
+                <input
+                  type="checkbox"
+                  checked={attractionRetired}
+                  onChange={(event) => setAttractionRetired(event.target.checked)}
+                />
+                Ride Retired
+              </label>
+              <small className="field-help">
+                Retired attractions stay in visit history and move into the archive.
+              </small>
               <button
                 className="button button-primary"
                 type="submit"
@@ -1849,7 +1671,7 @@ function App() {
                 <div className="park-card-heading">
                   <div>
                     <h3>{park.name}</h3>
-                    <p>{park.attractions.length} attractions</p>
+                    <p>{park.attractions.filter((attraction) => !attraction.retired).length} active attractions</p>
                   </div>
                   <button
                     type="button"
@@ -1864,14 +1686,14 @@ function App() {
                   <p className="empty-copy">No attractions added yet.</p>
                 ) : (
                   <ul className="attraction-library-list">
-                    {sortAttractions(park.attractions).map((attraction) => (
+                    {sortAttractions(park.attractions.filter((attraction) => !attraction.retired)).map((attraction) => (
                       <li key={attraction.id}>
                         <span>{categoryIcons[attraction.category]}</span>
                         <div>
                           <strong>{attraction.name}</strong>
                           <small>{attraction.category}</small>
-                          {attraction.source === 'themeparks-wiki' && (
-                            <small>Imported catalogue entry · editable</small>
+                          {attraction.source === 'rcdb' && (
+                            <small>RCDB rollercoaster · editable</small>
                           )}
                           {attraction.category === 'Rollercoaster' && (
                             <small>
@@ -1882,15 +1704,7 @@ function App() {
                           )}
                         </div>
                         <div className="library-actions">
-                          {supportsVehicleLayout(attraction) && (
-                            <button
-                              type="button"
-                              className="text-button"
-                              onClick={() => openRideDetails(attraction)}
-                            >
-                              Ride page
-                            </button>
-                          )}
+                          <button type="button" className="text-button" onClick={() => openRideDetails(attraction)}>Ride page</button>
                           <button
                             type="button"
                             className="text-button"
@@ -1910,6 +1724,23 @@ function App() {
                     ))}
                   </ul>
                 )}
+                {park.attractions.some((attraction) => attraction.retired) && (
+                  <details className="archive-section">
+                    <summary>Archive ({park.attractions.filter((attraction) => attraction.retired).length})</summary>
+                    <ul className="attraction-library-list">
+                      {sortAttractions(park.attractions.filter((attraction) => attraction.retired)).map((attraction) => (
+                        <li key={attraction.id}>
+                          <span>📦</span>
+                          <div><strong>{attraction.name}</strong><small>{attraction.category} · Retired</small></div>
+                          <div className="library-actions">
+                            <button type="button" className="text-button" onClick={() => startEditingAttraction(park, attraction)}>Edit / restore</button>
+                            <button type="button" className="delete-link" onClick={() => deleteAttraction(park.id, attraction.id)}>Remove</button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
               </article>
             ))}
           </div>
@@ -1923,8 +1754,7 @@ function App() {
               <p className="eyebrow dark">RIDE DIRECTORY</p>
               <h2>Choose a ride</h2>
               <p>
-                Every attraction has its own page for ride totals, vehicle setup and
-                seat-map progress.
+                Every active attraction has its own page for your ride totals.
               </p>
             </div>
           </div>
@@ -1947,9 +1777,6 @@ function App() {
                 const attractionLogs = allRideLogs.filter(
                   (rideLog) => rideLog.attractionId === attraction.id,
                 )
-                const layoutRows = attraction.vehicleLayout?.rows ?? []
-                const coverage = calculateSeatCoverage(layoutRows, attractionLogs)
-
                 return (
                   <button
                     type="button"
@@ -1967,11 +1794,7 @@ function App() {
                     </span>
                     <span className="ride-profile-totals">
                       <b>{attractionLogs.length} rides</b>
-                      <small>
-                        {layoutRows.length > 0
-                          ? `${coverage.uniqueSeatsRidden}/${coverage.totalSeats} seats`
-                          : 'Set up vehicle'}
-                      </small>
+                      <small>{attraction.category}</small>
                     </span>
                     <span className="ride-profile-arrow" aria-hidden="true">→</span>
                   </button>
@@ -2005,124 +1828,9 @@ function App() {
                 <strong>{selectedRideLogs.length}</strong>
                 <small>Total rides</small>
               </article>
-              <article>
-                <strong>{selectedSeatCoverage.uniqueSeatsRidden}</strong>
-                <small>Seats ridden</small>
-              </article>
-              <article>
-                <strong>{selectedSeatCoverage.coveragePercent.toFixed(0)}%</strong>
-                <small>Seat coverage</small>
-              </article>
-              <article>
-                <strong>{selectedRideDayCount} / {selectedRideNightCount}</strong>
-                <small>Day / night</small>
-              </article>
+              <article><strong>{new Set(visits.filter((visit) => readRideLogs(visit).some((log) => log.attractionId === selectedRide.attraction.id)).map((visit) => visit.id)).size}</strong><small>Visits ridden</small></article>
             </div>
           </section>
-
-          {layoutDraftRows.length === 0 ? (
-            <section className="content-section vehicle-empty-state">
-              <span>🚃</span>
-              <div>
-                <p className="eyebrow dark">VEHICLE LAYOUT</p>
-                <h3>Build this ride’s seat map</h3>
-                <p>
-                  Start with a four-row vehicle, then change the number of seats in
-                  each row to match the real train or ride car.
-                </p>
-              </div>
-              <button
-                type="button"
-                className="button button-primary"
-                onClick={() => setLayoutDraftRows(createVehicleRows())}
-              >
-                Create 4 × 4 layout
-              </button>
-            </section>
-          ) : (
-            <section className="content-section ride-layout-workspace">
-              <div className="vehicle-map-section">
-                <div className="section-heading compact">
-                  <div>
-                    <p className="eyebrow dark">SEAT PROGRESS</p>
-                    <h3>Vehicle seat map</h3>
-                  </div>
-                  <strong className="coverage-pill">
-                    {selectedSeatCoverage.uniqueSeatsRidden} of{' '}
-                    {selectedSeatCoverage.totalSeats} seats
-                  </strong>
-                </div>
-                <VehicleSeatMap rows={layoutDraftRows} rideLogs={selectedRideLogs} />
-                {selectedSeatCoverage.unmappedRideLogs > 0 && (
-                  <p className="layout-warning">
-                    {selectedSeatCoverage.unmappedRideLogs} ride{' '}
-                    {selectedSeatCoverage.unmappedRideLogs === 1 ? 'log has' : 'logs have'}{' '}
-                    a row or seat outside this layout. Adjust the vehicle or edit the
-                    visit details to place them.
-                  </p>
-                )}
-              </div>
-
-              <aside className="vehicle-layout-editor">
-                <div>
-                  <p className="eyebrow dark">CONFIGURE VEHICLE</p>
-                  <h3>Rows and seats</h3>
-                  <p>Each row can have a different number of seats.</p>
-                </div>
-                <div className="vehicle-row-editor-list">
-                  {layoutDraftRows.map((row, index) => (
-                    <div className="vehicle-row-editor" key={row.id}>
-                      <label>
-                        Row {index + 1} seats
-                        <input
-                          type="number"
-                          min="1"
-                          max="20"
-                          step="1"
-                          value={row.seats}
-                          onChange={(event) =>
-                            updateVehicleRowSeats(row.id, Number(event.target.value))
-                          }
-                        />
-                      </label>
-                      <button
-                        type="button"
-                        className="delete-link"
-                        onClick={() => removeVehicleRow(row.id)}
-                        disabled={layoutDraftRows.length === 1}
-                        aria-label={`Remove row ${index + 1}`}
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                <button
-                  type="button"
-                  className="button button-secondary add-row-button"
-                  onClick={addVehicleRow}
-                >
-                  Add row
-                </button>
-                <button
-                  type="button"
-                  className="button button-primary"
-                  onClick={saveVehicleLayout}
-                >
-                  Save vehicle layout
-                </button>
-                {selectedRide.attraction.vehicleLayout && (
-                  <button
-                    type="button"
-                    className="delete-link remove-layout-button"
-                    onClick={removeVehicleLayout}
-                  >
-                    Remove vehicle layout
-                  </button>
-                )}
-              </aside>
-            </section>
-          )}
         </>
       )}
 
@@ -2323,11 +2031,8 @@ function App() {
                 </p>
               ) : (
                 <div className="ride-list">
-                  {sortAttractions(selectedPark.attractions).map((attraction) => {
+                  {sortAttractions(selectedPark.attractions.filter((attraction) => !attraction.retired)).map((attraction) => {
                     const selected = (rideCounts[attraction.id] ?? 0) > 0
-                    const attractionRideLogs = draftRideLogs.filter(
-                      (rideLog) => rideLog.attractionId === attraction.id,
-                    )
 
                     return (
                       <div className={`ride-row${selected ? ' selected' : ''}`} key={attraction.id}>
@@ -2379,80 +2084,6 @@ function App() {
                             </button>
                           </div>
                         </div>
-                        {selected && (
-                          <div className="ride-log-details">
-                            <div className="ride-log-details-heading">
-                              <strong>Individual rides</strong>
-                              <small>Add the exact seat and when you rode.</small>
-                            </div>
-                            {attractionRideLogs.map((rideLog, index) => (
-                              <fieldset className="ride-log-card" key={rideLog.id}>
-                                <legend>
-                                  Ride {index + 1}
-                                  {rideLog.riddenAt && (
-                                    <span>
-                                      Logged at {formatVisitTime(rideLog.riddenAt)}
-                                    </span>
-                                  )}
-                                </legend>
-                                <div className="ride-log-fields">
-                                  <label>
-                                    Row
-                                    <input
-                                      type="number"
-                                      min="1"
-                                      step="1"
-                                      inputMode="numeric"
-                                      aria-label={`Row for ${attraction.name} ride ${index + 1}`}
-                                      value={rideLog.row ?? ''}
-                                      onChange={(event) =>
-                                        updateRideLogDetails(rideLog.id, {
-                                          row: event.target.value || undefined,
-                                        })
-                                      }
-                                      placeholder="—"
-                                    />
-                                  </label>
-                                  <label>
-                                    Seat
-                                    <input
-                                      type="number"
-                                      min="1"
-                                      step="1"
-                                      inputMode="numeric"
-                                      aria-label={`Seat for ${attraction.name} ride ${index + 1}`}
-                                      value={rideLog.seat ?? ''}
-                                      onChange={(event) =>
-                                        updateRideLogDetails(rideLog.id, {
-                                          seat: event.target.value || undefined,
-                                        })
-                                      }
-                                      placeholder="—"
-                                    />
-                                  </label>
-                                  <label>
-                                    Ride time
-                                    <select
-                                      aria-label={`Day or night for ${attraction.name} ride ${index + 1}`}
-                                      value={rideLog.timeOfDay ?? ''}
-                                      onChange={(event) =>
-                                        updateRideLogDetails(rideLog.id, {
-                                          timeOfDay:
-                                            (event.target.value as RideLog['timeOfDay']) ||
-                                            undefined,
-                                        })
-                                      }
-                                    >
-                                      <option value="">Choose</option>
-                                      <option value="day">Day</option>
-                                      <option value="night">Night</option>
-                                    </select>
-                                  </label>
-                                </div>
-                              </fieldset>
-                            ))}
-                          </div>
-                        )}
                       </div>
                     )
                   })}
