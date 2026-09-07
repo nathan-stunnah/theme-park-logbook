@@ -430,6 +430,7 @@ function App() {
   const [checkInOpen, setCheckInOpen] = useState(false)
   const [clockNow, setClockNow] = useState(() => new Date().toISOString())
   const [selectedYear, setSelectedYear] = useState(currentYear)
+  const [expandedVisits, setExpandedVisits] = useState<Set<string>>(new Set())
 
   const [parks, setParks] = useState<Park[]>(() =>
     readSavedData<Park>('theme-park-parks-v2'),
@@ -1178,6 +1179,18 @@ function App() {
     setPage('visits')
     setCheckInOpen(false)
     setVisitEditorOpen(true)
+  }
+
+  function toggleVisitExpanded(visitId: string) {
+    setExpandedVisits((currentExpanded) => {
+      const newExpanded = new Set(currentExpanded)
+      if (newExpanded.has(visitId)) {
+        newExpanded.delete(visitId)
+      } else {
+        newExpanded.add(visitId)
+      }
+      return newExpanded
+    })
   }
 
   function closeVisitPanel() {
@@ -2612,6 +2625,13 @@ function App() {
                     <button
                       type="button"
                       className="text-button"
+                      onClick={() => toggleVisitExpanded(visit.id)}
+                    >
+                      {expandedVisits.has(visit.id) ? 'Collapse' : 'Expand'}
+                    </button>
+                    <button
+                      type="button"
+                      className="text-button"
                       onClick={() => startEditingVisit(visit)}
                     >
                       Edit
@@ -2626,43 +2646,47 @@ function App() {
                   </div>
                 </div>
 
-                {getVisitDisplayEntries(visit).length === 0 ? (
-                  <p className="empty-copy">No attractions recorded for this visit.</p>
-                ) : (
-                  <ul className="visit-entry-list">
-                    {getVisitDisplayEntries(visit).map((entry) => {
-                      const detailedRideLogs = readRideLogs(visit)
-                        .filter(
-                          (rideLog) =>
-                            rideLog.attractionId === entry.attractionId,
-                        )
-                        .map((rideLog, index) => ({ rideLog, index }))
-                        .filter(
-                          ({ rideLog }) =>
-                            rideLog.row || rideLog.seat || rideLog.timeOfDay,
-                        )
+                {expandedVisits.has(visit.id) && (
+                  <>
+                    {getVisitDisplayEntries(visit).length === 0 ? (
+                      <p className="empty-copy">No attractions recorded for this visit.</p>
+                    ) : (
+                      <ul className="visit-entry-list">
+                        {getVisitDisplayEntries(visit).map((entry) => {
+                          const detailedRideLogs = readRideLogs(visit)
+                            .filter(
+                              (rideLog) =>
+                                rideLog.attractionId === entry.attractionId,
+                            )
+                            .map((rideLog, index) => ({ rideLog, index }))
+                            .filter(
+                              ({ rideLog }) =>
+                                rideLog.row || rideLog.seat || rideLog.timeOfDay,
+                            )
 
-                      return (
-                        <li key={entry.attractionId}>
-                          <span>{categoryIcons[entry.category]}</span>
-                          <div>
-                            <strong>{entry.name}</strong>
-                            <small>{entry.category}</small>
-                            {detailedRideLogs.length > 0 && (
-                              <div className="ride-log-summary-list">
-                                {detailedRideLogs.map(({ rideLog, index }) => (
-                                  <span key={rideLog.id}>
-                                    Ride {index + 1}: {formatRideLogSummary(rideLog)}
-                                  </span>
-                                ))}
+                          return (
+                            <li key={entry.attractionId}>
+                              <span>{categoryIcons[entry.category]}</span>
+                              <div>
+                                <strong>{entry.name}</strong>
+                                <small>{entry.category}</small>
+                                {detailedRideLogs.length > 0 && (
+                                  <div className="ride-log-summary-list">
+                                    {detailedRideLogs.map(({ rideLog, index }) => (
+                                      <span key={rideLog.id}>
+                                        Ride {index + 1}: {formatRideLogSummary(rideLog)}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
                               </div>
-                            )}
-                          </div>
-                          <b>× {entry.times}</b>
-                        </li>
-                      )
-                    })}
-                  </ul>
+                              <b>× {entry.times}</b>
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    )}
+                  </>
                 )}
                 <VisitFunStats entries={enrichEntries([visit])} />
               </article>
