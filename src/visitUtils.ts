@@ -29,6 +29,7 @@ export type RideLog = Omit<CoasterStatsEntry, 'times'> & {
   row?: string
   seat?: string
   timeOfDay?: 'day' | 'night'
+  scareRating?: number
 }
 
 export type VisitRideData = {
@@ -130,7 +131,8 @@ export function calculateVisitDraftStats(
 
       if (
         attraction.category === 'Scare Maze' ||
-        attraction.category === 'Scare Zone'
+        attraction.category === 'Scare Zone' ||
+        attraction.category === 'Scare Attraction'
       ) {
         stats.scareExperiences += times
       } else {
