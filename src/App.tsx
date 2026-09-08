@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type FormEvent,
 } from 'react'
@@ -170,6 +171,10 @@ function sortAttractions(attractions: Attraction[]) {
   )
 }
 
+function isScareCategory(category: Category) {
+  return ['Scare Maze', 'Scare Zone', 'Scare Attraction'].includes(category)
+}
+
 const DATA_VERSION = 5
 
 function createPreloadedParks(): Park[] {
@@ -229,6 +234,7 @@ function getTodayDateInputValue() {
 function formatRideLogSummary(rideLog: RideLog) {
   return [
     rideLog.riddenAt ? formatVisitTime(rideLog.riddenAt) : null,
+    rideLog.scareRating ? `${'🎃'.repeat(rideLog.scareRating)} scare level` : null,
   ]
     .filter(Boolean)
     .join(' · ')
@@ -380,6 +386,9 @@ function App() {
   const [clockNow, setClockNow] = useState(() => new Date().toISOString())
   const [selectedYear, setSelectedYear] = useState(currentYear)
   const [expandedVisits, setExpandedVisits] = useState<Set<string>>(new Set())
+  const [collapsedParks, setCollapsedParks] = useState<Set<string>>(new Set())
+  const parkFormRef = useRef<HTMLFormElement>(null)
+  const attractionFormRef = useRef<HTMLFormElement>(null)
 
   const [parks, setParks] = useState<Park[]>(readInitialParks)
   const [visits, setVisits] = useState<Visit[]>(() =>
@@ -397,6 +406,7 @@ function App() {
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null)
 
   const [newParkName, setNewParkName] = useState('')
+  const [editingParkId, setEditingParkId] = useState<string | null>(null)
   const [attractionParkId, setAttractionParkId] = useState('')
   const [newAttractionName, setNewAttractionName] = useState('')
   const [newAttractionCategory, setNewAttractionCategory] =
@@ -709,6 +719,22 @@ function App() {
     const name = newParkName.trim()
     if (!name) return
 
+    if (editingParkId) {
+      setParks((currentParks) =>
+        currentParks.map((park) =>
+          park.id === editingParkId ? { ...park, name } : park,
+        ),
+      )
+      setVisits((currentVisits) =>
+        currentVisits.map((visit) =>
+          visit.parkId === editingParkId ? { ...visit, parkName: name } : visit,
+        ),
+      )
+      setEditingParkId(null)
+      setNewParkName('')
+      return
+    }
+
     const newPark: Park = {
       id: crypto.randomUUID(),
       name,
@@ -890,6 +916,29 @@ function App() {
     setInversions(String(attraction.inversions ?? ''))
     setAttractionRetired(Boolean(attraction.retired))
     setEditingAttraction({ parkId: park.id, attractionId: attraction.id })
+    window.requestAnimationFrame(() =>
+      attractionFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+    )
+  }
+
+  function startEditingPark(park: Park) {
+    setEditingParkId(park.id)
+    setNewParkName(park.name)
+    window.requestAnimationFrame(() =>
+      parkFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+    )
+  }
+
+  function toggleParkCollapsed(parkId: string) {
+    setCollapsedParks((current) => {
+      const next = new Set(current)
+      if (next.has(parkId)) {
+        next.delete(parkId)
+      } else {
+        next.add(parkId)
+      }
+      return next
+    })
   }
 
   function openRideDetails(attraction: Attraction) {
@@ -1085,6 +1134,7 @@ function App() {
             trackLengthMetres: attraction.trackLengthMetres,
             topSpeedMph: attraction.topSpeedMph,
             inversions: attraction.inversions,
+            scareRating: matchingLogs[0]?.scareRating,
             ...(editingActiveVisit ? { riddenAt: loggedAt.toISOString() } : {}),
           }
         },
@@ -1092,6 +1142,16 @@ function App() {
 
       return [...otherLogs, ...matchingLogs, ...additions]
     })
+  }
+
+  function setScareRating(attractionId: string, rating: number) {
+    setDraftRideLogs((currentRideLogs) =>
+      currentRideLogs.map((rideLog) =>
+        rideLog.attractionId === attractionId
+          ? { ...rideLog, scareRating: rating }
+          : rideLog,
+      ),
+    )
   }
 
   function deleteVisit(id: string) {
@@ -1542,8 +1602,8 @@ function App() {
           </div>
 
           <div className="management-grid">
-            <form className="form-card" onSubmit={handleAddPark}>
-              <h3>Add a park</h3>
+            <form className="form-card" onSubmit={handleAddPark} ref={parkFormRef}>
+              <h3>{editingParkId ? 'Edit park' : 'Add a park'}</h3>
               <label>
                 Park name
                 <input
@@ -1555,12 +1615,24 @@ function App() {
                 />
               </label>
               <button className="button button-primary" type="submit">
-                Save park
+                {editingParkId ? 'Update park' : 'Save park'}
               </button>
+              {editingParkId && (
+                <button
+                  type="button"
+                  className="text-button"
+                  onClick={() => {
+                    setEditingParkId(null)
+                    setNewParkName('')
+                  }}
+                >
+                  Cancel editing
+                </button>
+              )}
             </form>
 
-            <form className="form-card" onSubmit={handleAddAttraction}>
-              <h3>Add an attraction</h3>
+            <form className="form-card" onSubmit={handleAddAttraction} ref={attractionFormRef}>
+              <h3>{editingAttraction ? 'Edit attraction' : 'Add an attraction'}</h3>
               <label>
                 Park
                 <select
@@ -1666,22 +1738,44 @@ function App() {
           </div>
 
           <div className="park-library">
-            {parks.map((park) => (
-              <article className="park-card" key={park.id}>
+            {parks.map((park) => {
+              const collapsed = collapsedParks.has(park.id)
+
+              return (
+              <article className={`park-card${collapsed ? ' collapsed' : ''}`} key={park.id}>
                 <div className="park-card-heading">
-                  <div>
-                    <h3>{park.name}</h3>
-                    <p>{park.attractions.filter((attraction) => !attraction.retired).length} active attractions</p>
-                  </div>
                   <button
                     type="button"
-                    className="delete-link"
-                    onClick={() => deletePark(park.id)}
+                    className="park-collapse-button"
+                    onClick={() => toggleParkCollapsed(park.id)}
+                    aria-expanded={!collapsed}
                   >
-                    Remove park
+                    <span aria-hidden="true">{collapsed ? '▸' : '▾'}</span>
+                    <span>
+                      <strong>{park.name}</strong>
+                      <small>{park.attractions.filter((attraction) => !attraction.retired).length} active attractions</small>
+                    </span>
                   </button>
+                  <div className="park-heading-actions">
+                    <button
+                      type="button"
+                      className="text-button"
+                      onClick={() => startEditingPark(park)}
+                    >
+                      Edit park
+                    </button>
+                    <button
+                      type="button"
+                      className="delete-link"
+                      onClick={() => deletePark(park.id)}
+                    >
+                      Remove park
+                    </button>
+                  </div>
                 </div>
 
+                {!collapsed && (
+                  <>
                 {park.attractions.length === 0 ? (
                   <p className="empty-copy">No attractions added yet.</p>
                 ) : (
@@ -1741,8 +1835,11 @@ function App() {
                     </ul>
                   </details>
                 )}
+                  </>
+                )}
               </article>
-            ))}
+              )
+            })}
           </div>
         </section>
       )}
@@ -1793,7 +1890,10 @@ function App() {
                       <em>{attraction.category}</em>
                     </span>
                     <span className="ride-profile-totals">
-                      <b>{attractionLogs.length} rides</b>
+                      <b>
+                        {attractionLogs.length}{' '}
+                        {isScareCategory(attraction.category) ? 'run-throughs' : 'rides'}
+                      </b>
                       <small>{attraction.category}</small>
                     </span>
                     <span className="ride-profile-arrow" aria-hidden="true">→</span>
@@ -1826,9 +1926,12 @@ function App() {
             <div className="ride-profile-stats" aria-label="Ride profile statistics">
               <article>
                 <strong>{selectedRideLogs.length}</strong>
-                <small>Total rides</small>
+                <small>{isScareCategory(selectedRide.attraction.category) ? 'Run-throughs' : 'Total rides'}</small>
               </article>
-              <article><strong>{new Set(visits.filter((visit) => readRideLogs(visit).some((log) => log.attractionId === selectedRide.attraction.id)).map((visit) => visit.id)).size}</strong><small>Visits ridden</small></article>
+              <article>
+                <strong>{new Set(visits.filter((visit) => readRideLogs(visit).some((log) => log.attractionId === selectedRide.attraction.id)).map((visit) => visit.id)).size}</strong>
+                <small>{isScareCategory(selectedRide.attraction.category) ? 'Visits with Run-throughs' : 'Visits ridden'}</small>
+              </article>
             </div>
           </section>
         </>
@@ -2033,6 +2136,10 @@ function App() {
                 <div className="ride-list">
                   {sortAttractions(selectedPark.attractions.filter((attraction) => !attraction.retired)).map((attraction) => {
                     const selected = (rideCounts[attraction.id] ?? 0) > 0
+                    const scareAttraction = isScareCategory(attraction.category)
+                    const scareRating = draftRideLogs.find(
+                      (rideLog) => rideLog.attractionId === attraction.id,
+                    )?.scareRating ?? 0
 
                     return (
                       <div className={`ride-row${selected ? ' selected' : ''}`} key={attraction.id}>
@@ -2051,11 +2158,11 @@ function App() {
                           </span>
                         </label>
                         <div className="times-field">
-                          <span>Times</span>
-                          <div className="ride-stepper" role="group" aria-label={`Times ridden on ${attraction.name}`}>
+                          <span>{scareAttraction ? 'Run-throughs' : 'Times ridden'}</span>
+                          <div className="ride-stepper" role="group" aria-label={`${scareAttraction ? 'Run-throughs' : 'Times ridden'} on ${attraction.name}`}>
                             <button
                               type="button"
-                              aria-label={`Decrease times ridden on ${attraction.name}`}
+                              aria-label={`Decrease ${scareAttraction ? 'run-throughs' : 'times ridden'} on ${attraction.name}`}
                               disabled={!selected}
                               onClick={() =>
                                 setAttractionCount(
@@ -2066,12 +2173,12 @@ function App() {
                             >
                               −
                             </button>
-                            <output aria-live="polite" aria-label="Times ridden">
+                            <output aria-live="polite" aria-label={scareAttraction ? 'Run-throughs' : 'Times ridden'}>
                               {rideCounts[attraction.id] ?? 0}
                             </output>
                             <button
                               type="button"
-                              aria-label={`Increase times ridden on ${attraction.name}`}
+                              aria-label={`Increase ${scareAttraction ? 'run-throughs' : 'times ridden'} on ${attraction.name}`}
                               disabled={(rideCounts[attraction.id] ?? 0) >= MAX_RIDE_COUNT}
                               onClick={() =>
                                 setAttractionCount(
@@ -2084,6 +2191,26 @@ function App() {
                             </button>
                           </div>
                         </div>
+                        {scareAttraction && selected && (
+                          <div className="pumpkin-rating">
+                            <span>Scare level</span>
+                            <div className="pumpkin-buttons" role="group" aria-label={`Scare level for ${attraction.name}`}>
+                              {[1, 2, 3, 4, 5].map((rating) => (
+                                <button
+                                  type="button"
+                                  className={`pumpkin-button${scareRating >= rating ? ' active' : ''}`}
+                                  aria-label={`${rating} out of 5 pumpkins`}
+                                  aria-pressed={scareRating === rating}
+                                  onClick={() => setScareRating(attraction.id, rating)}
+                                  key={rating}
+                                >
+                                  🎃
+                                </button>
+                              ))}
+                            </div>
+                            <small>{scareRating ? `${scareRating}/5 pumpkins` : 'Choose a rating'}</small>
+                          </div>
+                        )}
                       </div>
                     )
                   })}
