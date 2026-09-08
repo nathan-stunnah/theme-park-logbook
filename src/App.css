@@ -1106,6 +1106,10 @@
   border-radius: 20px;
 }
 
+.form-card {
+  scroll-margin-top: 18px;
+}
+
 .form-card label,
 .visit-details label,
 .year-picker,
@@ -1168,6 +1172,48 @@ select:focus {
   gap: 16px;
   align-items: start;
   justify-content: space-between;
+}
+
+.park-collapse-button {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  min-width: 0;
+  padding: 0;
+  color: var(--ink);
+  text-align: left;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.park-collapse-button > span:first-child {
+  color: #9333ea;
+  font-size: 1.3rem;
+  line-height: 1.25;
+}
+
+.park-collapse-button > span:last-child {
+  display: grid;
+}
+
+.park-collapse-button strong {
+  font-family: var(--display);
+  font-size: 1.3rem;
+}
+
+.park-collapse-button small {
+  color: var(--muted);
+}
+
+.park-heading-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 10px;
+}
+
+.park-card.collapsed {
+  padding-block: 18px;
 }
 
 .visit-card-actions {
@@ -1376,6 +1422,48 @@ select:focus {
 
 .times-field {
   font-size: 0.78rem;
+}
+
+.pumpkin-rating {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 7px;
+  padding: 12px 14px;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 12px;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.pumpkin-buttons {
+  display: flex;
+  gap: 4px;
+}
+
+.pumpkin-button {
+  padding: 4px;
+  filter: grayscale(1);
+  font-size: 1.45rem;
+  line-height: 1;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  opacity: 0.35;
+}
+
+.pumpkin-button.active {
+  filter: none;
+  opacity: 1;
+}
+
+.pumpkin-button:focus-visible {
+  outline: 3px solid rgb(234 88 12 / 25%);
+  border-radius: 8px;
+}
+
+.pumpkin-rating small {
+  color: var(--muted);
 }
 
 .ride-stepper {
@@ -1689,6 +1777,15 @@ select:focus {
 
   .active-visit-heading {
     flex-direction: column;
+  }
+
+  .park-card-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .park-heading-actions {
+    justify-content: flex-end;
   }
 
   .hero {
