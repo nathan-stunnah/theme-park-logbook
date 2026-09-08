@@ -18,6 +18,7 @@ export type CoasterStatsEntry = {
   name: string
   category: string
   times: number
+  trackLengthFeet?: number
   trackLengthMetres?: number
   topSpeedMph?: number
   inversions?: number
@@ -64,7 +65,7 @@ export function readRideLogs(visit: VisitRideData): RideLog[] {
       attractionId: entry.attractionId,
       name: entry.name,
       category: entry.category,
-      trackLengthMetres: entry.trackLengthMetres,
+      trackLengthFeet: entry.trackLengthFeet,
       topSpeedMph: entry.topSpeedMph,
       inversions: entry.inversions,
     })),
@@ -81,9 +82,9 @@ export function aggregateRideLogs(rideLogs: RideLog[]): CoasterStatsEntry[] {
         name: rideLog.name,
         category: rideLog.category,
         times: (existing?.times ?? 0) + 1,
-        ...(rideLog.trackLengthMetres === undefined
+        ...(rideLog.trackLengthFeet === undefined
           ? {}
-          : { trackLengthMetres: rideLog.trackLengthMetres }),
+          : { trackLengthFeet: rideLog.trackLengthFeet }),
         ...(rideLog.topSpeedMph === undefined
           ? {}
           : { topSpeedMph: rideLog.topSpeedMph }),
@@ -156,8 +157,8 @@ export function calculateCoasterAchievements(
   const coasterEntries = entries.filter(
     (entry) => entry.category === 'Rollercoaster' && entry.times > 0,
   )
-  const totalTrackMetres = coasterEntries.reduce(
-    (total, entry) => total + (entry.trackLengthMetres ?? 0) * entry.times,
+  const totalTrackFeet = coasterEntries.reduce(
+    (total, entry) => total + (entry.trackLengthFeet ?? 0) * entry.times,
     0,
   )
   const totalInversions = coasterEntries.reduce(
@@ -185,8 +186,8 @@ export function calculateCoasterAchievements(
   )[0]
 
   return {
-    trackKilometres: totalTrackMetres / 1000,
-    trackMiles: totalTrackMetres / 1609.344,
+    trackKilometres: (totalTrackFeet * 0.3048) / 1000,
+    trackMiles: totalTrackFeet / 5280,
     totalInversions,
     totalCoasterRides: coasterEntries.reduce(
       (total, entry) => total + entry.times,

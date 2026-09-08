@@ -9,7 +9,7 @@ import {
 import type { Session } from '@supabase/supabase-js'
 import './App.css'
 import PwaInstallCard from './PwaInstallCard'
-import { PARK_IMPORTS } from './parkImports'
+import { COASTER_TYPES, PARK_IMPORTS } from './parkImports'
 import { isSupabaseConfigured, supabase } from './supabase'
 import {
   MAX_RIDE_COUNT,
@@ -40,11 +40,14 @@ type Attraction = {
   id: string
   name: string
   category: Category
+  trackLengthFeet?: number
   trackLengthMetres?: number
   topSpeedMph?: number
   inversions?: number
-  source?: 'rcdb'
+  coasterType?: string
+  source?: 'rcdb' | 'coasterpedia'
   sourceId?: string
+  sourcePage?: string
   importedAt?: string
   retired?: boolean
 }
@@ -60,6 +63,7 @@ type VisitEntry = {
   name: string
   category: Category
   times: number
+  trackLengthFeet?: number
   trackLengthMetres?: number
   topSpeedMph?: number
   inversions?: number
@@ -89,9 +93,11 @@ type CloudData = {
 
 type ImportCandidate = {
   sourceId: string
+  sourcePage: string
   name: string
   category: Category
-  trackLengthMetres?: number
+  coasterType?: string
+  trackLengthFeet?: number
   topSpeedMph?: number
   inversions?: number
 }
@@ -175,17 +181,29 @@ function isScareCategory(category: Category) {
   return ['Scare Maze', 'Scare Zone', 'Scare Attraction'].includes(category)
 }
 
-const DATA_VERSION = 5
+const DATA_VERSION = 6
+
+function normaliseName(name: string) {
+  return name
+    .normalize('NFKD')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '')
+}
+
+function feetFromLegacy(item: { trackLengthFeet?: number; trackLengthMetres?: number }) {
+  if (item.trackLengthFeet !== undefined) return item.trackLengthFeet
+  if (item.trackLengthMetres === undefined) return undefined
+  return Math.round(item.trackLengthMetres * 3.28084 * 10) / 10
+}
 
 function createPreloadedParks(): Park[] {
   return PARK_IMPORTS.map((definition) => ({
-    id: `rcdb-park-${definition.key}`,
+    id: `coasterpedia-park-${definition.key}`,
     name: definition.name,
-    attractions: Object.entries(definition.overrides).map(([name, details], index) => ({
-      id: `rcdb-${definition.key}-${index}`,
-      name,
-      ...details,
-      source: 'rcdb' as const,
+    attractions: definition.attractions.map((attraction, index) => ({
+      id: `coasterpedia-${definition.key}-${index}`,
+      ...attraction,
+      source: 'coasterpedia' as const,
       sourceId: `${definition.key}-${index}`,
       importedAt: new Date().toISOString(),
       retired: false,
@@ -193,9 +211,73 @@ function createPreloadedParks(): Park[] {
   }))
 }
 
+function migrateParks(savedParks: Park[]) {
+  if (savedParks.length === 0) return createPreloadedParks()
+
+  const migrated: Park[] = savedParks.map((park) => ({
+    ...park,
+    attractions: park.attractions.map((attraction) => ({
+      ...attraction,
+      trackLengthFeet: feetFromLegacy(attraction),
+    })),
+  }))
+
+  for (const cataloguePark of createPreloadedParks()) {
+    const existingPark = migrated.find(
+      (park) =>
+        normaliseName(park.name) === normaliseName(cataloguePark.name) ||
+        park.id.endsWith(cataloguePark.id.replace('coasterpedia-park-', '')),
+    )
+
+    if (!existingPark) {
+      migrated.push(cataloguePark)
+      continue
+    }
+
+    const catalogueNames = new Set(
+      cataloguePark.attractions.map((attraction) => normaliseName(attraction.name)),
+    )
+    const existingByName = new Map(
+      existingPark.attractions.map((attraction) => [normaliseName(attraction.name), attraction]),
+    )
+    const currentAttractions = cataloguePark.attractions.map((attraction) => {
+      const existing = existingByName.get(normaliseName(attraction.name))
+      return existing
+        ? { ...existing, ...attraction, id: existing.id, retired: existing.retired ?? false }
+        : attraction
+    })
+    const unmatched = existingPark.attractions
+      .filter((attraction) => !catalogueNames.has(normaliseName(attraction.name)))
+      .map((attraction) =>
+        attraction.source === 'rcdb' || attraction.source === 'coasterpedia'
+          ? { ...attraction, source: 'coasterpedia' as const, retired: true }
+          : attraction,
+      )
+
+    existingPark.attractions = [...currentAttractions, ...unmatched]
+  }
+
+  return migrated
+}
+
+function migrateVisits(savedVisits: Visit[]) {
+  return savedVisits.map((visit) => ({
+    ...visit,
+    entries: visit.entries?.map((entry) => ({
+      ...entry,
+      trackLengthFeet: feetFromLegacy(entry),
+    })),
+    rideLogs: visit.rideLogs?.map((rideLog) => ({
+      ...rideLog,
+      trackLengthFeet: feetFromLegacy(rideLog),
+    })),
+  }))
+}
+
 function readInitialParks() {
-  const saved = readSavedData<Park>('theme-park-parks-v5')
-  return saved.length ? saved : createPreloadedParks()
+  const saved = readSavedData<Park>('theme-park-parks-v6')
+  const legacy = saved.length ? saved : readSavedData<Park>('theme-park-parks-v5')
+  return migrateParks(legacy)
 }
 
 function totalTimes(entries: VisitEntry[], selectedCategories: Category[]) {
@@ -392,7 +474,11 @@ function App() {
 
   const [parks, setParks] = useState<Park[]>(readInitialParks)
   const [visits, setVisits] = useState<Visit[]>(() =>
-    readSavedData<Visit>('theme-park-visits-v5'),
+    migrateVisits(
+      readSavedData<Visit>('theme-park-visits-v6').length
+        ? readSavedData<Visit>('theme-park-visits-v6')
+        : readSavedData<Visit>('theme-park-visits-v5'),
+    ),
   )
   const [session, setSession] = useState<Session | null>(null)
   const [authReady, setAuthReady] = useState(!supabase)
@@ -411,7 +497,8 @@ function App() {
   const [newAttractionName, setNewAttractionName] = useState('')
   const [newAttractionCategory, setNewAttractionCategory] =
     useState<Category>('Rollercoaster')
-  const [trackLengthMetres, setTrackLengthMetres] = useState('')
+  const [coasterType, setCoasterType] = useState('')
+  const [trackLengthFeet, setTrackLengthFeet] = useState('')
   const [topSpeedMph, setTopSpeedMph] = useState('')
   const [inversions, setInversions] = useState('')
   const [attractionRetired, setAttractionRetired] = useState(false)
@@ -444,11 +531,11 @@ function App() {
   }, [activeVisitId])
 
   useEffect(() => {
-    localStorage.setItem('theme-park-parks-v5', JSON.stringify(parks))
+    localStorage.setItem('theme-park-parks-v6', JSON.stringify(parks))
   }, [parks])
 
   useEffect(() => {
-    localStorage.setItem('theme-park-visits-v5', JSON.stringify(visits))
+    localStorage.setItem('theme-park-visits-v6', JSON.stringify(visits))
   }, [visits])
 
   useEffect(() => {
@@ -492,14 +579,13 @@ function App() {
 
     const cloudData = row?.data as CloudData | undefined
 
-    if (cloudData && cloudData.version >= DATA_VERSION) {
-      setParks(Array.isArray(cloudData.parks) ? cloudData.parks : [])
-      setVisits(Array.isArray(cloudData.visits) ? cloudData.visits : [])
+    if (cloudData) {
+      setParks(migrateParks(Array.isArray(cloudData.parks) ? cloudData.parks : []))
+      setVisits(migrateVisits(Array.isArray(cloudData.visits) ? cloudData.visits : []))
       if (row?.updated_at) setLastSyncedAt(row.updated_at as string)
     } else {
       setParks(createPreloadedParks())
       setVisits([])
-      setAuthMessage('Your previous synced logbook data has been cleared.')
     }
 
     setCloudLoaded(true)
@@ -621,7 +707,7 @@ function App() {
             ...entry,
             name: currentAttraction.name,
             category: currentAttraction.category,
-            trackLengthMetres: currentAttraction.trackLengthMetres,
+            trackLengthFeet: currentAttraction.trackLengthFeet,
             topSpeedMph: currentAttraction.topSpeedMph,
             inversions: currentAttraction.inversions,
           }
@@ -668,7 +754,7 @@ function App() {
 
         return {
           ...entry,
-          trackLengthMetres: currentAttraction.trackLengthMetres,
+          trackLengthFeet: currentAttraction.trackLengthFeet,
           topSpeedMph: currentAttraction.topSpeedMph,
           inversions: currentAttraction.inversions,
         }
@@ -766,9 +852,13 @@ function App() {
       id: editingAttraction?.attractionId ?? crypto.randomUUID(),
       name,
       category: newAttractionCategory,
-      trackLengthMetres:
-        newAttractionCategory === 'Rollercoaster' && trackLengthMetres
-          ? Number(trackLengthMetres)
+      coasterType:
+        newAttractionCategory === 'Rollercoaster' && coasterType
+          ? coasterType
+          : undefined,
+      trackLengthFeet:
+        newAttractionCategory === 'Rollercoaster' && trackLengthFeet
+          ? Number(trackLengthFeet)
           : undefined,
       topSpeedMph:
         newAttractionCategory === 'Rollercoaster' && topSpeedMph
@@ -811,11 +901,10 @@ function App() {
     if (!definition) return
 
     setImportMessage('')
-    const candidates = Object.entries(definition.overrides)
-        .map(([name, override], index): ImportCandidate => ({
+    const candidates = definition.attractions
+        .map((attraction, index): ImportCandidate => ({
           sourceId: `${definition.key}-${index}`,
-          name,
-          ...override,
+          ...attraction,
         }))
         .sort((first, second) =>
           first.name.localeCompare(second.name, 'en-GB', { sensitivity: 'base' }),
@@ -826,7 +915,7 @@ function App() {
         Object.fromEntries(candidates.map((candidate) => [candidate.sourceId, true])),
       )
       setImportMessage(
-        `${candidates.length} RCDB rollercoasters found. Review the list before importing.`,
+        `${candidates.length} current Coasterpedia attractions found. Review the list before importing.`,
       )
   }
 
@@ -846,23 +935,25 @@ function App() {
       existingAttractions.map((attraction) => attraction.sourceId).filter(Boolean),
     )
     const existingNames = new Set(
-      existingAttractions.map((attraction) => attraction.name.toLowerCase()),
+      existingAttractions.map((attraction) => normaliseName(attraction.name)),
     )
     const additions: Attraction[] = chosen
       .filter(
         (candidate) =>
           !existingSourceIds.has(candidate.sourceId) &&
-          !existingNames.has(candidate.name.toLowerCase()),
+          !existingNames.has(normaliseName(candidate.name)),
       )
       .map((candidate) => ({
         id: candidate.sourceId,
         name: candidate.name,
         category: candidate.category,
-        trackLengthMetres: candidate.trackLengthMetres,
+        coasterType: candidate.coasterType,
+        trackLengthFeet: candidate.trackLengthFeet,
         topSpeedMph: candidate.topSpeedMph,
         inversions: candidate.inversions,
-        source: 'rcdb',
+        source: 'coasterpedia',
         sourceId: candidate.sourceId,
+        sourcePage: candidate.sourcePage,
         importedAt,
         retired: false,
       }))
@@ -900,7 +991,8 @@ function App() {
   function resetAttractionForm() {
     setNewAttractionName('')
     setNewAttractionCategory('Rollercoaster')
-    setTrackLengthMetres('')
+    setCoasterType('')
+    setTrackLengthFeet('')
     setTopSpeedMph('')
     setInversions('')
     setAttractionRetired(false)
@@ -911,7 +1003,8 @@ function App() {
     setAttractionParkId(park.id)
     setNewAttractionName(attraction.name)
     setNewAttractionCategory(attraction.category)
-    setTrackLengthMetres(String(attraction.trackLengthMetres ?? ''))
+    setCoasterType(attraction.coasterType ?? '')
+    setTrackLengthFeet(String(attraction.trackLengthFeet ?? ''))
     setTopSpeedMph(String(attraction.topSpeedMph ?? ''))
     setInversions(String(attraction.inversions ?? ''))
     setAttractionRetired(Boolean(attraction.retired))
@@ -965,7 +1058,7 @@ function App() {
             ...rideLog,
             name: currentAttraction.name,
             category: currentAttraction.category,
-            trackLengthMetres: currentAttraction.trackLengthMetres,
+            trackLengthFeet: currentAttraction.trackLengthFeet,
             topSpeedMph: currentAttraction.topSpeedMph,
             inversions: currentAttraction.inversions,
           }
@@ -1131,7 +1224,7 @@ function App() {
             attractionId: attraction.id,
             name: attraction.name,
             category: attraction.category,
-            trackLengthMetres: attraction.trackLengthMetres,
+            trackLengthFeet: attraction.trackLengthFeet,
             topSpeedMph: attraction.topSpeedMph,
             inversions: attraction.inversions,
             scareRating: matchingLogs[0]?.scareRating,
@@ -1498,12 +1591,12 @@ function App() {
                 <p className="eyebrow dark">QUICK START</p>
                 <h3>Import a current park catalogue</h3>
                 <p>
-                  Operating rollercoasters are preloaded from RCDB. Every entry remains
+                  Current rides and attractions are preloaded from Coasterpedia. Every entry remains
                   fully editable and can be retired into the archive.
                 </p>
               </div>
               <a
-                href={PARK_IMPORTS.find((park) => park.key === importParkKey)?.rcdbUrl}
+                href={PARK_IMPORTS.find((park) => park.key === importParkKey)?.coasterpediaUrl}
                 target="_blank"
                 rel="noreferrer"
               >
@@ -1535,7 +1628,7 @@ function App() {
                 className="button button-secondary"
                 onClick={loadImportPreview}
               >
-                Load rollercoaster list
+                Load attraction list
               </button>
             </div>
 
@@ -1582,7 +1675,10 @@ function App() {
                         <span>{categoryIcons[candidate.category]}</span>
                         <span>
                           <strong>{candidate.name}</strong>
-                          <small>{candidate.category}</small>
+                          <small>
+                            {candidate.category}
+                            {candidate.coasterType ? ` · ${candidate.coasterType}` : ''}
+                          </small>
                         </span>
                       </label>
                     </li>
@@ -1677,14 +1773,26 @@ function App() {
               {newAttractionCategory === 'Rollercoaster' && (
                 <div className="coaster-fields">
                   <label>
-                    Track length (metres)
+                    Coaster type
+                    <select
+                      value={coasterType}
+                      onChange={(event) => setCoasterType(event.target.value)}
+                    >
+                      <option value="">Choose a type</option>
+                      {COASTER_TYPES.map((type) => (
+                        <option value={type} key={type}>{type}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    Track length (feet)
                     <input
                       type="number"
                       min="0"
                       step="0.1"
-                      value={trackLengthMetres}
-                      onChange={(event) => setTrackLengthMetres(event.target.value)}
-                      placeholder="For example, 850"
+                      value={trackLengthFeet}
+                      onChange={(event) => setTrackLengthFeet(event.target.value)}
+                      placeholder="For example, 2,755"
                     />
                   </label>
                   <label>
@@ -1786,12 +1894,13 @@ function App() {
                         <div>
                           <strong>{attraction.name}</strong>
                           <small>{attraction.category}</small>
-                          {attraction.source === 'rcdb' && (
-                            <small>RCDB rollercoaster · editable</small>
+                          {attraction.source === 'coasterpedia' && (
+                            <small>Coasterpedia catalogue · editable</small>
                           )}
                           {attraction.category === 'Rollercoaster' && (
                             <small>
-                              {attraction.trackLengthMetres ?? '—'} m ·{' '}
+                              {attraction.coasterType ?? 'Type not recorded'} ·{' '}
+                              {attraction.trackLengthFeet ?? '—'} ft ·{' '}
                               {attraction.topSpeedMph ?? '—'} mph ·{' '}
                               {attraction.inversions ?? '—'} inversions
                             </small>
@@ -1920,7 +2029,12 @@ function App() {
               <div>
                 <p className="eyebrow dark">{selectedRide.park.name}</p>
                 <h2>{selectedRide.attraction.name}</h2>
-                <p>{selectedRide.attraction.category}</p>
+                <p>
+                  {selectedRide.attraction.category}
+                  {selectedRide.attraction.coasterType
+                    ? ` · ${selectedRide.attraction.coasterType}`
+                    : ''}
+                </p>
               </div>
             </div>
             <div className="ride-profile-stats" aria-label="Ride profile statistics">

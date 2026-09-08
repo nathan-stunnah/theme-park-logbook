@@ -69,7 +69,7 @@ test('calculateCoasterAchievements multiplies ride specifications by ride count'
       name: 'Coaster A',
       category: 'Rollercoaster',
       times: 2,
-      trackLengthMetres: 1500,
+      trackLengthFeet: 4921.3,
       topSpeedMph: 70,
       inversions: 3,
     },
@@ -78,7 +78,7 @@ test('calculateCoasterAchievements multiplies ride specifications by ride count'
       name: 'Coaster B',
       category: 'Rollercoaster',
       times: 1,
-      trackLengthMetres: 1000,
+      trackLengthFeet: 3280.84,
       topSpeedMph: 55,
       inversions: 2,
     },
@@ -87,12 +87,12 @@ test('calculateCoasterAchievements multiplies ride specifications by ride count'
       name: 'Dark Ride',
       category: 'Dark Ride',
       times: 4,
-      trackLengthMetres: 9999,
+      trackLengthFeet: 9999,
       inversions: 99,
     },
   ])
 
-  assert.equal(stats.trackKilometres, 4)
+  assert.equal(Number(stats.trackKilometres.toFixed(3)), 4)
   assert.equal(stats.totalInversions, 8)
   assert.equal(stats.totalCoasterRides, 3)
   assert.equal(stats.uniqueCoasters, 2)
