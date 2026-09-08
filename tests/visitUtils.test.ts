@@ -25,6 +25,8 @@ test('calculateVisitDraftStats updates totals from the current counts', () => {
     { id: 'coaster', category: 'Rollercoaster' },
     { id: 'dark-ride', category: 'Dark Ride' },
     { id: 'maze', category: 'Scare Maze' },
+    { id: 'zone', category: 'Scare Zone' },
+    { id: 'scare-attraction', category: 'Scare Attraction' },
   ]
 
   assert.deepEqual(
@@ -32,13 +34,15 @@ test('calculateVisitDraftStats updates totals from the current counts', () => {
       coaster: 2,
       'dark-ride': 1,
       maze: 3,
+      zone: 2,
+      'scare-attraction': 1,
       removedAttraction: 20,
     }),
     {
-      totalExperiences: 6,
-      uniqueAttractions: 3,
+      totalExperiences: 9,
+      uniqueAttractions: 5,
       rideExperiences: 3,
-      scareExperiences: 3,
+      scareExperiences: 6,
     },
   )
 })
