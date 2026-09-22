@@ -1395,6 +1395,49 @@ select:focus {
   border-color: #c084fc;
 }
 
+.seat-logger {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 10px;
+  padding: 12px;
+  background: #fff;
+  border: 1px solid #dfc8f6;
+  border-radius: 12px;
+}
+
+.seat-logger-heading {
+  display: grid;
+  gap: 3px;
+}
+
+.seat-logger-heading small {
+  color: var(--muted);
+}
+
+.seat-logger-entry {
+  display: grid;
+  grid-template-columns: minmax(54px, auto) repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  align-items: end;
+}
+
+.seat-logger-entry > strong {
+  padding-bottom: 12px;
+}
+
+.seat-logger-entry label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  font-size: 0.78rem;
+}
+
+.seat-logger-entry select,
+.seat-logger-entry input {
+  width: 100%;
+  min-width: 0;
+}
+
 .ride-checkbox {
   display: grid;
   grid-template-columns: auto auto 1fr;
@@ -1888,6 +1931,15 @@ select:focus {
 }
 
 @media (max-width: 480px) {
+  .seat-logger-entry {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .seat-logger-entry > strong {
+    grid-column: 1 / -1;
+    padding-bottom: 0;
+  }
+
   .panel {
     padding: 20px;
   }
