@@ -541,11 +541,17 @@ function App() {
   useEffect(() => {
     if (!supabase) return
 
-    void supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session)
-      setSyncStatus(data.session ? 'loading' : 'local')
-      setAuthReady(true)
-    })
+    void supabase.auth.getSession()
+      .then(({ data, error }) => {
+        setSession(data.session)
+        setSyncStatus(error ? 'error' : data.session ? 'loading' : 'local')
+        if (error) setAuthMessage(`Cloud sign-in check failed: ${error.message}`)
+      })
+      .catch(() => {
+        setSyncStatus('error')
+        setAuthMessage('Could not reach cloud sync. Check your connection and try again.')
+      })
+      .finally(() => setAuthReady(true))
 
     const {
       data: { subscription },
@@ -648,25 +654,32 @@ function App() {
       password: authPassword,
     }
 
-    const { data, error } =
-      authMode === 'sign-up'
-        ? await supabase.auth.signUp({
-            ...credentials,
-            options: { emailRedirectTo: window.location.origin },
-          })
-        : await supabase.auth.signInWithPassword(credentials)
+    try {
+      const { data, error } =
+        authMode === 'sign-up'
+          ? await supabase.auth.signUp({
+              ...credentials,
+              options: { emailRedirectTo: window.location.origin },
+            })
+          : await supabase.auth.signInWithPassword(credentials)
 
-    if (error) {
-      setAuthMessage(error.message)
-    } else if (authMode === 'sign-up' && !data.session) {
-      setAuthMessage('Check your email to confirm the account, then sign in here.')
-      setAuthMode('sign-in')
-    } else {
-      setAuthMessage('Signed in. Loading your private cloud data…')
-      setAuthPassword('')
+      if (error) {
+        const networkError = /load failed|failed to fetch|network|fetch failed/i.test(error.message)
+        setAuthMessage(networkError
+          ? 'Could not reach cloud sync. Check your connection and try again. If it keeps happening, try opening the site in Safari without a content blocker.'
+          : error.message)
+      } else if (authMode === 'sign-up' && !data.session) {
+        setAuthMessage('Check your email to confirm the account, then sign in here.')
+        setAuthMode('sign-in')
+      } else {
+        setAuthMessage('Signed in. Loading your private cloud data…')
+        setAuthPassword('')
+      }
+    } catch {
+      setAuthMessage('Could not reach cloud sync. Check your connection and try again.')
+    } finally {
+      setAuthBusy(false)
     }
-
-    setAuthBusy(false)
   }
 
   async function handleSignOut() {
