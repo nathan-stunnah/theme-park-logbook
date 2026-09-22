@@ -30,7 +30,7 @@ npm install
 npm run dev
 ```
 
-Create `.env.local` from `.env.example` and provide the Supabase project URL and publishable key to enable cloud sync.
+Cloud sync uses the logbook's public Supabase project URL and publishable key in `src/supabase.ts`. The key cannot grant access to another user's data; Supabase enforces per-user access with row-level security.
 
 Before publishing a release:
 
