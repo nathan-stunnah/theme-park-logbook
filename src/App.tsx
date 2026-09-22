@@ -480,6 +480,7 @@ function RideBreakdownCards({
 function App() {
   const [page, setPage] = useState<Page>('home')
   const [selectedRideId, setSelectedRideId] = useState<string | null>(null)
+  const [rideDirectorySearch, setRideDirectorySearch] = useState('')
   const [visitEditorOpen, setVisitEditorOpen] = useState(false)
   const [checkInOpen, setCheckInOpen] = useState(false)
   const [clockNow, setClockNow] = useState(() => new Date().toISOString())
@@ -775,6 +776,12 @@ function App() {
       .filter((attraction) => !attraction.retired)
       .map((attraction) => ({ park, attraction })),
   )
+  const rideDirectoryTerm = rideDirectorySearch.trim().toLocaleLowerCase()
+  const matchingRideDirectory = rideDirectoryTerm
+    ? rideDirectory.filter(({ park, attraction }) =>
+        `${attraction.name} ${attraction.category} ${park.name}`.toLocaleLowerCase().includes(rideDirectoryTerm),
+      )
+    : []
   const selectedRide = rideDirectory.find(
     ({ attraction }) => attraction.id === selectedRideId,
   )
@@ -2092,8 +2099,23 @@ function App() {
               </button>
             </div>
           ) : (
-            <div className="ride-directory-grid">
-              {rideDirectory.map(({ park, attraction }) => {
+            <>
+              <label className="ride-search-field">
+                Search rides and attractions
+                <input
+                  type="search"
+                  value={rideDirectorySearch}
+                  onChange={(event) => setRideDirectorySearch(event.target.value)}
+                  placeholder="Search by ride, park or category"
+                  autoComplete="off"
+                />
+              </label>
+              {matchingRideDirectory.length === 0 ? (
+                <p className="empty-copy" role="status">
+                  {rideDirectoryTerm ? 'No matching rides or attractions. Try another search.' : 'Search above to find a ride or attraction.'}
+                </p>
+              ) : <div className="ride-directory-grid">
+              {matchingRideDirectory.map(({ park, attraction }) => {
                 const attractionLogs = allRideLogs.filter(
                   (rideLog) => rideLog.attractionId === attraction.id,
                 )
@@ -2123,7 +2145,8 @@ function App() {
                   </button>
                 )
               })}
-            </div>
+              </div>}
+            </>
           )}
         </section>
       )}
