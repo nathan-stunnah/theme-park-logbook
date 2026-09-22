@@ -8,6 +8,7 @@ export type AttractionImport = {
   name: string
   category: Category
   sourcePage: string
+  trainLayout?: { rows: number; seatsPerRow: number }
   coasterType?: string
   trackLengthFeet?: number
   topSpeedMph?: number
