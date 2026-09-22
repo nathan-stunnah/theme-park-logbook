@@ -45,6 +45,8 @@ type Attraction = {
   topSpeedMph?: number
   inversions?: number
   coasterType?: string
+  trainLayout?: { rows: number; seatsPerRow: number }
+  layoutEdited?: boolean
   source?: 'rcdb' | 'coasterpedia'
   sourceId?: string
   sourcePage?: string
@@ -97,6 +99,7 @@ type ImportCandidate = {
   name: string
   category: Category
   coasterType?: string
+  trainLayout?: { rows: number; seatsPerRow: number }
   trackLengthFeet?: number
   topSpeedMph?: number
   inversions?: number
@@ -243,7 +246,13 @@ function migrateParks(savedParks: Park[]) {
     const currentAttractions = cataloguePark.attractions.map((attraction) => {
       const existing = existingByName.get(normaliseName(attraction.name))
       return existing
-        ? { ...existing, ...attraction, id: existing.id, retired: existing.retired ?? false }
+        ? {
+            ...existing,
+            ...attraction,
+            trainLayout: existing.layoutEdited ? existing.trainLayout : attraction.trainLayout,
+            id: existing.id,
+            retired: existing.retired ?? false,
+          }
         : attraction
     })
     const unmatched = existingPark.attractions
@@ -316,6 +325,8 @@ function getTodayDateInputValue() {
 function formatRideLogSummary(rideLog: RideLog) {
   return [
     rideLog.riddenAt ? formatVisitTime(rideLog.riddenAt) : null,
+    rideLog.row ? `Row ${rideLog.row}` : null,
+    rideLog.seat ? `Seat ${rideLog.seat}` : null,
     rideLog.scareRating ? `${'🎃'.repeat(rideLog.scareRating)} scare level` : null,
   ]
     .filter(Boolean)
@@ -501,6 +512,8 @@ function App() {
   const [trackLengthFeet, setTrackLengthFeet] = useState('')
   const [topSpeedMph, setTopSpeedMph] = useState('')
   const [inversions, setInversions] = useState('')
+  const [layoutRows, setLayoutRows] = useState('')
+  const [layoutSeatsPerRow, setLayoutSeatsPerRow] = useState('')
   const [attractionRetired, setAttractionRetired] = useState(false)
   const [editingAttraction, setEditingAttraction] = useState<{
     parkId: string
@@ -851,6 +864,7 @@ function App() {
 
     const name = newAttractionName.trim()
     if (!attractionParkId || !name) return
+    if (newAttractionCategory === 'Rollercoaster' && Boolean(layoutRows) !== Boolean(layoutSeatsPerRow)) return
     const targetParkId = editingAttraction?.parkId ?? attractionParkId
     const existingAttraction = editingAttraction
       ? parks
@@ -881,6 +895,14 @@ function App() {
         newAttractionCategory === 'Rollercoaster' && inversions
           ? Number(inversions)
           : undefined,
+      trainLayout:
+        newAttractionCategory === 'Rollercoaster' && layoutRows && layoutSeatsPerRow
+          ? { rows: Number(layoutRows), seatsPerRow: Number(layoutSeatsPerRow) }
+          : undefined,
+      layoutEdited: existingAttraction?.layoutEdited ||
+        (newAttractionCategory === 'Rollercoaster' &&
+          (Number(layoutRows || 0) !== (existingAttraction?.trainLayout?.rows ?? 0) ||
+            Number(layoutSeatsPerRow || 0) !== (existingAttraction?.trainLayout?.seatsPerRow ?? 0))),
       retired: attractionRetired,
     }
 
@@ -961,6 +983,7 @@ function App() {
         name: candidate.name,
         category: candidate.category,
         coasterType: candidate.coasterType,
+        trainLayout: candidate.trainLayout,
         trackLengthFeet: candidate.trackLengthFeet,
         topSpeedMph: candidate.topSpeedMph,
         inversions: candidate.inversions,
@@ -1008,6 +1031,8 @@ function App() {
     setTrackLengthFeet('')
     setTopSpeedMph('')
     setInversions('')
+    setLayoutRows('')
+    setLayoutSeatsPerRow('')
     setAttractionRetired(false)
     setEditingAttraction(null)
   }
@@ -1020,6 +1045,8 @@ function App() {
     setTrackLengthFeet(String(attraction.trackLengthFeet ?? ''))
     setTopSpeedMph(String(attraction.topSpeedMph ?? ''))
     setInversions(String(attraction.inversions ?? ''))
+    setLayoutRows(String(attraction.trainLayout?.rows ?? ''))
+    setLayoutSeatsPerRow(String(attraction.trainLayout?.seatsPerRow ?? ''))
     setAttractionRetired(Boolean(attraction.retired))
     setEditingAttraction({ parkId: park.id, attractionId: attraction.id })
     window.requestAnimationFrame(() =>
@@ -1256,6 +1283,14 @@ function App() {
         rideLog.attractionId === attractionId
           ? { ...rideLog, scareRating: rating }
           : rideLog,
+      ),
+    )
+  }
+
+  function setRideSeat(rideLogId: string, field: 'row' | 'seat', value: string) {
+    setDraftRideLogs((currentRideLogs) =>
+      currentRideLogs.map((rideLog) =>
+        rideLog.id === rideLogId ? { ...rideLog, [field]: value || undefined } : rideLog,
       ),
     )
   }
@@ -1830,6 +1865,33 @@ function App() {
                       placeholder="For example, 4"
                     />
                   </label>
+                  <label>
+                    Rows in the train
+                    <input
+                      type="number"
+                      min="1"
+                      max="40"
+                      step="1"
+                      value={layoutRows}
+                      onChange={(event) => setLayoutRows(event.target.value)}
+                      required={Boolean(layoutSeatsPerRow)}
+                      placeholder="For example, 7"
+                    />
+                  </label>
+                  <label>
+                    Seats per row
+                    <input
+                      type="number"
+                      min="1"
+                      max="10"
+                      step="1"
+                      value={layoutSeatsPerRow}
+                      onChange={(event) => setLayoutSeatsPerRow(event.target.value)}
+                      required={Boolean(layoutRows)}
+                      placeholder="For example, 4"
+                    />
+                  </label>
+                  <small className="field-help">The train layout supplies the row and seat choices when logging this coaster. Leave both blank for a free-text seat.</small>
                 </div>
               )}
               <label className="retired-option">
@@ -2336,6 +2398,46 @@ function App() {
                               ))}
                             </div>
                             <small>{scareRating ? `${scareRating}/5 pumpkins` : 'Choose a rating'}</small>
+                          </div>
+                        )}
+                        {attraction.category === 'Rollercoaster' && selected && (
+                          <div className="seat-logger">
+                            <div className="seat-logger-heading">
+                              <strong>Where did you sit?</strong>
+                              <small>
+                                {attraction.trainLayout
+                                  ? `${attraction.trainLayout.rows} rows · ${attraction.trainLayout.seatsPerRow} seats per row, numbered left to right`
+                                  : 'Enter a row and seat if you know them.'}
+                                {attraction.sourcePage && <>{' · '}<a href={`https://coasterpedia.net/wiki/${encodeURIComponent(attraction.sourcePage.replaceAll(' ', '_'))}`} target="_blank" rel="noreferrer">Coasterpedia</a></>}
+                              </small>
+                            </div>
+                            {draftRideLogs.filter((rideLog) => rideLog.attractionId === attraction.id).map((rideLog, index) => (
+                              <div className="seat-logger-entry" key={rideLog.id}>
+                                <strong>Ride {index + 1}</strong>
+                                <label>
+                                  Row
+                                  {attraction.trainLayout ? (
+                                    <select value={rideLog.row ?? ''} onChange={(event) => setRideSeat(rideLog.id, 'row', event.target.value)}>
+                                      <option value="">Choose row</option>
+                                      {Array.from({ length: attraction.trainLayout.rows }, (_, row) => <option value={row + 1} key={row}>{row + 1}</option>)}
+                                    </select>
+                                  ) : (
+                                    <input type="text" value={rideLog.row ?? ''} onChange={(event) => setRideSeat(rideLog.id, 'row', event.target.value)} placeholder="e.g. 1" />
+                                  )}
+                                </label>
+                                <label>
+                                  Seat
+                                  {attraction.trainLayout ? (
+                                    <select value={rideLog.seat ?? ''} onChange={(event) => setRideSeat(rideLog.id, 'seat', event.target.value)}>
+                                      <option value="">Choose seat</option>
+                                      {Array.from({ length: attraction.trainLayout.seatsPerRow }, (_, seat) => <option value={seat + 1} key={seat}>{seat + 1}</option>)}
+                                    </select>
+                                  ) : (
+                                    <input type="text" value={rideLog.seat ?? ''} onChange={(event) => setRideSeat(rideLog.id, 'seat', event.target.value)} placeholder="e.g. left" />
+                                  )}
+                                </label>
+                              </div>
+                            ))}
                           </div>
                         )}
                       </div>
