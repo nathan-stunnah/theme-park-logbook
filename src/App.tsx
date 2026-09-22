@@ -322,6 +322,12 @@ function getTodayDateInputValue() {
   return `${today.getFullYear()}-${month}-${day}`
 }
 
+function toLocalDateTimeInput(value: string) {
+  const date = new Date(value)
+  const pad = (number: number) => String(number).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
 function formatRideLogSummary(rideLog: RideLog) {
   return [
     rideLog.riddenAt ? formatVisitTime(rideLog.riddenAt) : null,
@@ -482,6 +488,7 @@ function App() {
   const [collapsedParks, setCollapsedParks] = useState<Set<string>>(new Set())
   const parkFormRef = useRef<HTMLFormElement>(null)
   const attractionFormRef = useRef<HTMLFormElement>(null)
+  const visitHistoryRef = useRef<HTMLElement>(null)
 
   const [parks, setParks] = useState<Park[]>(readInitialParks)
   const [visits, setVisits] = useState<Visit[]>(() =>
@@ -526,6 +533,11 @@ function App() {
 
   const [visitParkId, setVisitParkId] = useState('')
   const [visitDate, setVisitDate] = useState('')
+  const [checkInTime, setCheckInTime] = useState('')
+  const [visitCheckedInAt, setVisitCheckedInAt] = useState('')
+  const [visitCheckedOutAt, setVisitCheckedOutAt] = useState('')
+  const [visitTimeError, setVisitTimeError] = useState('')
+  const [rideSearch, setRideSearch] = useState('')
   const [draftRideLogs, setDraftRideLogs] = useState<RideLog[]>([])
   const [editingVisitId, setEditingVisitId] = useState<string | null>(null)
   const activeVisit = visits.find(isActiveVisit)
@@ -712,6 +724,14 @@ function App() {
     () => countRideLogs(draftRideLogs),
     [draftRideLogs],
   )
+  const searchTerm = rideSearch.trim().toLocaleLowerCase()
+  const visibleAttractions = selectedPark
+    ? sortAttractions(selectedPark.attractions.filter((attraction) =>
+        !attraction.retired && (searchTerm
+          ? `${attraction.name} ${attraction.category}`.toLocaleLowerCase().includes(searchTerm)
+          : (rideCounts[attraction.id] ?? 0) > 0),
+      ))
+    : []
   const visitDraftStats = useMemo(
     () =>
       calculateVisitDraftStats(selectedPark?.attractions ?? [], rideCounts),
@@ -1083,6 +1103,11 @@ function App() {
     event.preventDefault()
 
     if (!selectedPark || !visitDate) return
+    if (visitCheckedOutAt && (!visitCheckedInAt || new Date(visitCheckedOutAt) <= new Date(visitCheckedInAt))) {
+      setVisitTimeError('Check-out must be after check-in. Add or adjust the times above.')
+      return
+    }
+    setVisitTimeError('')
 
     const originalVisit = editingVisitId
       ? visits.find((visit) => visit.id === editingVisitId)
@@ -1111,23 +1136,28 @@ function App() {
       parkName: selectedPark.name,
       date: visitDate,
       rideLogs,
-      status: originalVisit?.status ?? 'completed',
+      status: visitCheckedOutAt ? 'completed' : originalVisit?.status ?? 'completed',
+      checkedInAt: visitCheckedInAt ? new Date(visitCheckedInAt).toISOString() : undefined,
+      checkedOutAt: visitCheckedOutAt ? new Date(visitCheckedOutAt).toISOString() : undefined,
     }
     delete newVisit.entries
 
-    setVisits((currentVisits) =>
-      editingVisitId
-        ? currentVisits.map((visit) =>
-            visit.id === editingVisitId ? newVisit : visit,
-          )
-        : [newVisit, ...currentVisits],
-    )
+    setVisits((currentVisits) => [newVisit, ...currentVisits.filter((visit) => visit.id !== newVisit.id)])
     closeVisitPanel()
+    if (newVisit.status !== 'active') {
+      window.requestAnimationFrame(() =>
+        visitHistoryRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+      )
+    }
   }
 
   function openNewVisit() {
     setEditingVisitId(null)
     setVisitDate(getTodayDateInputValue())
+    setVisitCheckedInAt('')
+    setVisitCheckedOutAt('')
+    setVisitTimeError('')
+    setRideSearch('')
     setDraftRideLogs([])
     if (!visitParkId && parks[0]) setVisitParkId(parks[0].id)
     setPage('visits')
@@ -1146,6 +1176,7 @@ function App() {
     setEditingVisitId(null)
     setDraftRideLogs([])
     setVisitDate(getTodayDateInputValue())
+    setCheckInTime(toLocalDateTimeInput(new Date().toISOString()))
     if (!visitParkId && parks[0]) setVisitParkId(parks[0].id)
     setPage('visits')
     setVisitEditorOpen(false)
@@ -1156,19 +1187,19 @@ function App() {
     event.preventDefault()
     if (!selectedPark || activeVisit) return
 
-    const checkedInAt = new Date().toISOString()
+    const checkedInAt = new Date(checkInTime).toISOString()
     const newVisit: Visit = {
       id: crypto.randomUUID(),
       parkId: selectedPark.id,
       parkName: selectedPark.name,
-      date: getTodayDateInputValue(),
+      date: checkInTime.slice(0, 10),
       rideLogs: [],
       status: 'active',
       checkedInAt,
     }
 
     setVisits((currentVisits) => [newVisit, ...currentVisits])
-    setClockNow(checkedInAt)
+    setClockNow(new Date().toISOString())
     setCheckInOpen(false)
   }
 
@@ -1185,6 +1216,10 @@ function App() {
     setEditingVisitId(visit.id)
     setVisitParkId(visit.parkId)
     setVisitDate(visit.date)
+    setVisitCheckedInAt(visit.checkedInAt ? toLocalDateTimeInput(visit.checkedInAt) : '')
+    setVisitCheckedOutAt(visit.checkedOutAt ? toLocalDateTimeInput(visit.checkedOutAt) : '')
+    setVisitTimeError('')
+    setRideSearch('')
     setDraftRideLogs(readRideLogs(visit))
     setPage('visits')
     setCheckInOpen(false)
@@ -1206,6 +1241,10 @@ function App() {
   function closeVisitPanel() {
     setEditingVisitId(null)
     setVisitDate('')
+    setVisitCheckedInAt('')
+    setVisitCheckedOutAt('')
+    setVisitTimeError('')
+    setRideSearch('')
     setDraftRideLogs([])
     setVisitEditorOpen(false)
   }
@@ -2157,17 +2196,26 @@ function App() {
                 ))}
               </select>
             </label>
+            <label>
+              Check-in date and time
+              <input
+                type="datetime-local"
+                value={checkInTime}
+                onChange={(event) => setCheckInTime(event.target.value)}
+                required
+              />
+            </label>
             <div className="check-in-note">
               <span aria-hidden="true">📍</span>
               <div>
-                <strong>Your visit starts now</strong>
+                <strong>Your visit starts at the time you choose</strong>
                 <p>
                   Log rides throughout the day, then check out when you leave.
                 </p>
               </div>
             </div>
             <button className="button button-primary" type="submit">
-              Check in now
+              Check in
             </button>
           </form>
         </section>
@@ -2284,13 +2332,49 @@ function App() {
                   required
                 />
               </label>
+              <label>
+                Check-in date and time
+                <input
+                  type="datetime-local"
+                  value={visitCheckedInAt}
+                  onChange={(event) => {
+                    setVisitCheckedInAt(event.target.value)
+                    setVisitTimeError('')
+                  }}
+                  required={Boolean(visitCheckedOutAt)}
+                />
+              </label>
+              <label>
+                Check-out date and time
+                <input
+                  type="datetime-local"
+                  value={visitCheckedOutAt}
+                  onChange={(event) => {
+                    setVisitCheckedOutAt(event.target.value)
+                    setVisitTimeError('')
+                  }}
+                  min={visitCheckedInAt || undefined}
+                />
+              </label>
             </div>
+            {visitTimeError && <p className="form-error" role="alert">{visitTimeError}</p>}
+            {editingActiveVisit && <p className="field-help">Adding a check-out time will complete this visit when you save.</p>}
 
             <div className="ride-selector">
               <div>
                 <h3>What did you experience?</h3>
-                <p>Select attractions and use the counters as you go.</p>
+                <p>Search for an attraction, then select it and set your ride count. Your selected rides appear below when the search is empty.</p>
               </div>
+              <label className="ride-search-field">
+                Search rides and attractions
+                <input
+                  type="search"
+                  value={rideSearch}
+                  onChange={(event) => setRideSearch(event.target.value)}
+                  placeholder="Search by name or category"
+                  autoComplete="off"
+                />
+              </label>
 
               <section className="visit-live-stats" aria-label="Live visit statistics">
                 <article>
@@ -2321,9 +2405,13 @@ function App() {
                 <p className="empty-copy">
                   This park has no attractions yet. You can still save the visit.
                 </p>
+              ) : visibleAttractions.length === 0 ? (
+                <p className="empty-copy" role="status">
+                  {searchTerm ? 'No matching rides or attractions. Try another search.' : 'Search above to find rides and attractions. Rides you select will appear here.'}
+                </p>
               ) : (
                 <div className="ride-list">
-                  {sortAttractions(selectedPark.attractions.filter((attraction) => !attraction.retired)).map((attraction) => {
+                  {visibleAttractions.map((attraction) => {
                     const selected = (rideCounts[attraction.id] ?? 0) > 0
                     const scareAttraction = isScareCategory(attraction.category)
                     const scareRating = draftRideLogs.find(
@@ -2449,7 +2537,7 @@ function App() {
 
             <button className="button button-primary save-visit" type="submit">
               {editingActiveVisit
-                ? 'Save ride updates'
+                ? visitCheckedOutAt ? 'Check out and save' : 'Save ride updates'
                 : editingVisitId
                   ? 'Update visit'
                   : 'Save visit'}
@@ -2576,7 +2664,7 @@ function App() {
         </>
       )}
 
-      {page === 'visits' && !visitEditorOpen && !checkInOpen && <section className="content-section">
+      {page === 'visits' && !visitEditorOpen && !checkInOpen && <section className="content-section" ref={visitHistoryRef}>
         <div className="section-heading">
           <div>
             <p className="eyebrow dark">YOUR TIMELINE</p>
@@ -2597,14 +2685,12 @@ function App() {
                   <div>
                     <h3>{visit.parkName}</h3>
                     <p>{formatDate(visit.date)}</p>
-                    {visit.checkedInAt && visit.checkedOutAt && (
+                    {(visit.checkedInAt || visit.checkedOutAt) && (
                       <small className="visit-session-duration">
-                        {formatVisitTime(visit.checkedInAt)}–
-                        {formatVisitTime(visit.checkedOutAt)} ·{' '}
-                        {formatVisitDuration(
-                          visit.checkedInAt,
-                          visit.checkedOutAt,
-                        )}
+                        {visit.checkedInAt && `Checked in ${formatVisitTime(visit.checkedInAt)}`}
+                        {visit.checkedInAt && visit.checkedOutAt && ' · '}
+                        {visit.checkedOutAt && `Checked out ${formatVisitTime(visit.checkedOutAt)}`}
+                        {visit.checkedInAt && visit.checkedOutAt && ` · ${formatVisitDuration(visit.checkedInAt, visit.checkedOutAt)}`}
                       </small>
                     )}
                   </div>
