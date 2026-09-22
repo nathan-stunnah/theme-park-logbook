@@ -156,6 +156,59 @@ def coaster_stats(wikitext: str) -> dict[str, float | int]:
     }
 
 
+def coaster_train_layout(wikitext: str) -> dict[str, dict[str, int]]:
+    """Only offer numbered seats when Coasterpedia states the arrangement."""
+    section = re.search(
+        r"^={2,4}\s*Trains?\s*={2,4}\s*$([\s\S]*?)(?=^={2,4}\s*\S|\Z)",
+        wikitext,
+        re.M | re.I,
+    )
+    if not section:
+        return {}
+
+    description = plain(section.group(1)).lower()
+    arrangement = re.search(
+        r"riders are arranged\s+(\d+)\s+across\s+in\s+(\d+)\s+rows?",
+        description,
+    )
+    single_row = re.search(
+        r"riders are arranged\s+(\d+)\s+across\s+in\s+a single row",
+        description,
+    )
+    inline = re.search(
+        r"riders are arranged\s+inline\s+in\s+(\d+)\s+rows?",
+        description,
+    )
+    if arrangement:
+        seats_per_row, rows_per_car = map(int, arrangement.groups())
+    elif single_row:
+        seats_per_row, rows_per_car = int(single_row.group(1)), 1
+    elif inline:
+        seats_per_row, rows_per_car = 1, int(inline.group(1))
+    else:
+        return {}
+
+    riders_per_train = re.search(r"total of (\d+) riders per train", description)
+    riders_per_car = re.search(r"total of (\d+) riders per car", description)
+    if riders_per_train:
+        total = int(riders_per_train.group(1))
+        if total % seats_per_row:
+            return {}
+        rows = total // seats_per_row
+    elif riders_per_car:
+        total = int(riders_per_car.group(1))
+        if total % seats_per_row:
+            return {}
+        rows = total // seats_per_row
+    else:
+        cars = re.search(r"(\d+) cars?\s+per train", description)
+        rows = int(cars.group(1)) * rows_per_car if cars else rows_per_car
+
+    if not 1 <= rows <= 40 or not 1 <= seats_per_row <= 10:
+        return {}
+    return {"trainLayout": {"rows": rows, "seatsPerRow": seats_per_row}}
+
+
 def main() -> None:
     park_source = fetch_wikitext([page for _, _, page in PARKS])
     catalogue: list[dict] = []
@@ -183,9 +236,12 @@ def main() -> None:
     for park in catalogue:
         for attraction in park["attractions"]:
             coaster_type = attraction.get("coasterType")
-            if coaster_type:
-                coaster_types.add(str(coaster_type))
-                attraction.update(coaster_stats(details.get(str(attraction["sourcePage"]), "")))
+            if attraction["category"] == "Rollercoaster":
+                if coaster_type:
+                    coaster_types.add(str(coaster_type))
+                wikitext = details.get(str(attraction["sourcePage"]), "")
+                attraction.update(coaster_stats(wikitext))
+                attraction.update(coaster_train_layout(wikitext))
 
     payload = {"coasterTypes": sorted(coaster_types), "parks": catalogue}
     output = "// Generated from Coasterpedia by scripts/build_coasterpedia_catalog.py\n"
