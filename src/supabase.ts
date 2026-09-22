@@ -1,7 +1,10 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabasePublishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
+// These are public client settings for this logbook's Supabase project.
+// Pinning them prevents a stale Vercel environment value from sending sign-ins
+// to a different project. Never put a secret or service-role key here.
+const supabaseUrl = 'https://nlwhvlolfqmalhbwuvek.supabase.co'
+const supabasePublishableKey = 'sb_publishable_J9WbbRlBNNtErSz11ctqbA_fu5NHYbo'
 
 export const supabase =
   supabaseUrl && supabasePublishableKey
