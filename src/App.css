@@ -2114,7 +2114,7 @@ select:focus {
   }
 
   .hero {
-    padding: 40px 16px 44px;
+    padding: calc(40px + env(safe-area-inset-top)) 16px 44px;
     border-radius: 0 0 26px 26px;
   }
 
@@ -2143,7 +2143,7 @@ select:focus {
 
   .page-header {
     gap: 18px;
-    padding: 28px 0 22px;
+    padding: calc(28px + env(safe-area-inset-top)) 0 22px;
   }
 
   .page-header h1 {
