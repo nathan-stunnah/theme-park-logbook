@@ -2079,3 +2079,473 @@ select:focus {
 .archive-section .attraction-library-list {
   margin-top: 1rem;
 }
+
+/* Mobile-first refinement: consistent spacing, alignment and touch targets. */
+@media (max-width: 760px) {
+  .app-shell {
+    overflow-x: hidden;
+    padding-bottom: calc(78px + env(safe-area-inset-bottom));
+    background:
+      radial-gradient(circle at 0 22%, #ffe3a3 0 50px, transparent 51px),
+      var(--cream);
+  }
+
+  .app-navigation {
+    min-height: 70px;
+    padding: 7px 8px calc(7px + env(safe-area-inset-bottom));
+  }
+
+  .primary-nav {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 4px;
+  }
+
+  .primary-nav button {
+    width: 100%;
+    min-width: 0;
+    min-height: 52px;
+    padding: 6px 2px;
+    line-height: 1.1;
+  }
+
+  .primary-nav button span {
+    font-size: 1.15rem;
+  }
+
+  .hero {
+    padding: 40px 16px 44px;
+    border-radius: 0 0 26px 26px;
+  }
+
+  .hero h1 {
+    max-width: 360px;
+    font-size: clamp(2.45rem, 13vw, 3.35rem);
+    line-height: 0.98;
+  }
+
+  .hero-copy {
+    margin: 16px auto 24px;
+    font-size: 1rem;
+  }
+
+  .hero-actions {
+    display: grid;
+    width: min(100%, 360px);
+    gap: 12px;
+    margin: 0 auto;
+  }
+
+  .page-header,
+  .content-section {
+    width: calc(100% - 24px);
+  }
+
+  .page-header {
+    gap: 18px;
+    padding: 28px 0 22px;
+  }
+
+  .page-header h1 {
+    font-size: clamp(2.15rem, 11vw, 3rem);
+  }
+
+  .page-header p:last-child {
+    margin-top: 10px;
+    font-size: 0.95rem;
+  }
+
+  .content-section {
+    padding: 26px 0;
+  }
+
+  .content-section + .content-section {
+    border-top: 0;
+  }
+
+  .sync-section {
+    padding-top: 20px;
+    padding-bottom: 20px;
+  }
+
+  .install-section {
+    padding-bottom: 20px;
+  }
+
+  .panel,
+  .onboarding,
+  .active-visit-card {
+    padding: 18px;
+    margin-top: 20px;
+    border-radius: 20px;
+  }
+
+  .section-heading {
+    gap: 14px;
+    margin-bottom: 18px;
+  }
+
+  .section-heading h2 {
+    font-size: 1.65rem;
+    line-height: 1.08;
+  }
+
+  .eyebrow {
+    margin-bottom: 7px;
+    font-size: 0.68rem;
+  }
+
+  .button {
+    min-height: 46px;
+    padding: 12px 18px;
+  }
+
+  .page-header-actions,
+  .active-visit-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    gap: 10px;
+  }
+
+  .page-header-actions .button,
+  .active-visit-actions .button,
+  .hero-actions .button {
+    width: 100%;
+  }
+
+  input,
+  select {
+    min-height: 46px;
+    font-size: 16px;
+  }
+
+  .check-in-form,
+  .form-card,
+  .visit-form,
+  .import-card,
+  .park-card,
+  .visit-card {
+    padding: 16px;
+    border-radius: 16px;
+  }
+
+  .check-in-form,
+  .form-card,
+  .visit-form {
+    gap: 16px;
+  }
+
+  .check-in-form .button,
+  .form-card > .button,
+  .save-visit,
+  .import-controls .button {
+    width: 100%;
+    justify-self: stretch;
+  }
+
+  .sync-login,
+  .sync-card {
+    gap: 14px;
+    padding: 16px;
+    border-radius: 16px;
+  }
+
+  .sync-intro {
+    align-items: flex-start;
+  }
+
+  .sync-form {
+    gap: 14px;
+  }
+
+  .sync-form .button {
+    width: 100%;
+    margin-bottom: 0;
+  }
+
+  .auth-footer {
+    justify-content: flex-start;
+  }
+
+  .install-card {
+    grid-template-columns: 42px minmax(0, 1fr);
+    gap: 12px;
+    padding: 16px;
+    border-radius: 16px;
+  }
+
+  .install-icon {
+    width: 42px;
+    height: 42px;
+    font-size: 1.4rem;
+    border-radius: 12px;
+  }
+
+  .install-copy p {
+    font-size: 0.86rem;
+    line-height: 1.35;
+  }
+
+  .install-instructions {
+    padding: 16px;
+    margin: 8px 6px 0;
+  }
+
+  .home-overview-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .home-overview-grid button {
+    align-content: start;
+    min-height: 166px;
+    padding: 16px;
+    border-radius: 16px;
+  }
+
+  .home-overview-grid span {
+    font-size: 1.45rem;
+  }
+
+  .home-overview-grid strong {
+    margin-top: 4px;
+    font-size: 1.75rem;
+  }
+
+  .home-overview-grid b {
+    align-self: end;
+    margin-top: 6px;
+    font-size: 0.82rem;
+  }
+
+  .management-grid,
+  .park-library,
+  .visit-history,
+  .visit-details,
+  .coaster-fields {
+    gap: 12px;
+  }
+
+  .import-card-heading,
+  .import-controls {
+    gap: 14px;
+  }
+
+  .import-card-heading a {
+    align-self: flex-start;
+    min-height: 44px;
+    padding: 11px 0;
+  }
+
+  .park-library,
+  .visit-history {
+    margin-top: 14px;
+  }
+
+  .park-card-heading,
+  .visit-card-heading {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .park-heading-actions,
+  .visit-card-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    gap: 8px;
+  }
+
+  .visit-card-actions {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .park-heading-actions button,
+  .visit-card-actions button,
+  .library-actions button {
+    min-height: 44px;
+    padding: 9px 8px;
+    border-radius: 10px;
+    background: #faf5ff;
+  }
+
+  .visit-card-actions .delete-link,
+  .library-actions .delete-link {
+    background: #fff1f2;
+  }
+
+  .attraction-library-list,
+  .visit-entry-list {
+    gap: 0;
+    margin-top: 14px;
+  }
+
+  .attraction-library-list li,
+  .visit-entry-list li {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 10px;
+    align-items: start;
+    padding: 12px 0;
+  }
+
+  .attraction-library-list li > b,
+  .visit-entry-list li > b {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .library-actions {
+    grid-column: 2;
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    margin-top: 4px;
+  }
+
+  .active-visit-heading {
+    gap: 16px;
+  }
+
+  .active-visit-heading h2 {
+    font-size: 2rem;
+  }
+
+  .visit-live-stats,
+  .visit-fun-stats,
+  .stats-grid,
+  .year-stats-grid,
+  .fun-stats-grid {
+    grid-auto-rows: 1fr;
+    gap: 8px;
+  }
+
+  .visit-live-stats article,
+  .visit-fun-stats article,
+  .stat-card,
+  .mini-stat,
+  .fun-stat {
+    min-width: 0;
+    padding: 13px;
+    border-radius: 14px;
+  }
+
+  .visit-live-stats small,
+  .visit-fun-stats small,
+  .stat-card p,
+  .mini-stat p,
+  .fun-stat p,
+  .fun-stat small {
+    overflow-wrap: anywhere;
+  }
+
+  .stat-card > strong {
+    margin-top: 8px;
+    font-size: 2rem;
+  }
+
+  .fun-stat > strong,
+  .mini-stat > strong {
+    margin-top: 6px;
+    font-size: 1.55rem;
+  }
+
+  .ride-selector {
+    gap: 14px;
+  }
+
+  .ride-row {
+    grid-template-columns: minmax(0, 1fr) 104px;
+    gap: 12px;
+    padding: 12px;
+    border-radius: 14px;
+  }
+
+  .ride-checkbox {
+    min-width: 0;
+    gap: 9px;
+  }
+
+  .ride-checkbox > span:last-child,
+  .ride-checkbox strong,
+  .ride-checkbox small {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .times-field {
+    min-width: 0;
+  }
+
+  .ride-stepper {
+    grid-template-columns: 34px minmax(28px, 1fr) 34px;
+    min-height: 44px;
+  }
+
+  .ride-stepper button {
+    min-width: 34px;
+  }
+
+  .seat-logger,
+  .pumpkin-rating {
+    padding: 11px;
+  }
+
+  .ride-profile-card {
+    gap: 10px;
+    min-height: 92px;
+    padding: 14px;
+    border-radius: 15px;
+  }
+
+  .ride-detail-hero {
+    width: 100%;
+    padding: 22px 16px;
+    margin-top: 0;
+    border-radius: 0 0 24px 24px;
+  }
+
+  .ride-detail-title {
+    gap: 12px;
+  }
+
+  .ride-detail-title h2 {
+    overflow-wrap: anywhere;
+    font-size: clamp(1.8rem, 10vw, 2.7rem);
+  }
+
+  .archive-section {
+    padding: 14px;
+  }
+}
+
+@media (max-width: 380px) {
+  .page-header-actions,
+  .active-visit-actions,
+  .park-heading-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .primary-nav button {
+    font-size: 0.62rem;
+  }
+
+  .home-overview-grid,
+  .stats-grid,
+  .fun-stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .home-overview-grid button {
+    min-height: 142px;
+  }
+
+  .ride-row {
+    grid-template-columns: 1fr;
+  }
+
+  .times-field {
+    grid-template-columns: 1fr;
+  }
+}
