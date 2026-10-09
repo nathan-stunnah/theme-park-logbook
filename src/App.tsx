@@ -45,6 +45,7 @@ type Attraction = {
   topSpeedMph?: number
   inversions?: number
   coasterType?: string
+  scareTheme?: string
   trainLayout?: { rows: number; seatsPerRow: number }
   layoutEdited?: boolean
   source?: 'rcdb' | 'coasterpedia'
@@ -517,6 +518,7 @@ function App() {
   const [newAttractionCategory, setNewAttractionCategory] =
     useState<Category>('Rollercoaster')
   const [coasterType, setCoasterType] = useState('')
+  const [scareTheme, setScareTheme] = useState('')
   const [trackLengthFeet, setTrackLengthFeet] = useState('')
   const [topSpeedMph, setTopSpeedMph] = useState('')
   const [inversions, setInversions] = useState('')
@@ -906,6 +908,7 @@ function App() {
       id: editingAttraction?.attractionId ?? crypto.randomUUID(),
       name,
       category: newAttractionCategory,
+      scareTheme: isScareCategory(newAttractionCategory) ? scareTheme.trim() : undefined,
       coasterType:
         newAttractionCategory === 'Rollercoaster' && coasterType
           ? coasterType
@@ -1055,6 +1058,7 @@ function App() {
     setNewAttractionName('')
     setNewAttractionCategory('Rollercoaster')
     setCoasterType('')
+    setScareTheme('')
     setTrackLengthFeet('')
     setTopSpeedMph('')
     setInversions('')
@@ -1069,6 +1073,7 @@ function App() {
     setNewAttractionName(attraction.name)
     setNewAttractionCategory(attraction.category)
     setCoasterType(attraction.coasterType ?? '')
+    setScareTheme(attraction.scareTheme ?? '')
     setTrackLengthFeet(String(attraction.trackLengthFeet ?? ''))
     setTopSpeedMph(String(attraction.topSpeedMph ?? ''))
     setInversions(String(attraction.inversions ?? ''))
@@ -1864,6 +1869,15 @@ function App() {
                   ))}
                 </select>
               </label>
+              {isScareCategory(newAttractionCategory) && (
+                <label>
+                  Theme
+                  <input type="text" value={scareTheme} onChange={(event) => setScareTheme(event.target.value)} placeholder="e.g. Haunted asylum, vampires, sci-fi" list="scare-theme-suggestions" />
+                  <datalist id="scare-theme-suggestions">
+                    {['Haunted house', 'Asylum', 'Zombies', 'Vampires', 'Clowns', 'Witches', 'Slasher', 'Apocalypse', 'Sci-fi', 'Folklore'].map((theme) => <option key={theme} value={theme} />)}
+                  </datalist>
+                </label>
+              )}
               {newAttractionCategory === 'Rollercoaster' && (
                 <div className="coaster-fields">
                   <label>
@@ -2005,11 +2019,22 @@ function App() {
 
                 {!collapsed && (
                   <>
+                <section className="scare-park-section" aria-label={`Scare experiences at ${park.name}`}>
+                  <h4>🎃 Scare experiences</h4>
+                  {(['Scare Maze', 'Scare Zone', 'Scare Attraction'] as const).map((category) => {
+                    const experiences = sortAttractions(park.attractions.filter((attraction) => !attraction.retired && attraction.category === category))
+                    return <div key={category} className="scare-park-category">
+                      <h5>{categoryIcons[category]} {category}s ({experiences.length})</h5>
+                      {experiences.length ? <ul className="attraction-library-list">{experiences.map((attraction) => <li key={attraction.id}><span>{categoryIcons[category]}</span><div><strong>{attraction.name}</strong><small>Theme: {attraction.scareTheme || 'Not chosen'}</small></div><div className="library-actions"><button type="button" className="text-button" onClick={() => startEditingAttraction(park, attraction)}>Edit</button><button type="button" className="delete-link" onClick={() => deleteAttraction(park.id, attraction.id)}>Remove</button></div></li>)}</ul> : <p className="empty-copy">No {category.toLowerCase()}s added yet.</p>}
+                    </div>
+                  })}
+                  <button type="button" className="text-button" onClick={() => { resetAttractionForm(); setAttractionParkId(park.id); setNewAttractionCategory('Scare Maze'); window.requestAnimationFrame(() => attractionFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })) }}>+ Add scare experience</button>
+                </section>
                 {park.attractions.length === 0 ? (
                   <p className="empty-copy">No attractions added yet.</p>
                 ) : (
                   <ul className="attraction-library-list">
-                    {sortAttractions(park.attractions.filter((attraction) => !attraction.retired)).map((attraction) => (
+                    {sortAttractions(park.attractions.filter((attraction) => !attraction.retired && !isScareCategory(attraction.category))).map((attraction) => (
                       <li key={attraction.id}>
                         <span>{categoryIcons[attraction.category]}</span>
                         <div>
