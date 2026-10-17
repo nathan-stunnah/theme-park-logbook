@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import './App.css'
 
 type Kind = 'Coaster' | 'Flat Ride' | 'Dark Ride' | 'Water Ride' | 'Scare Maze' | 'Scare Zone' | 'Other'
@@ -9,7 +9,7 @@ type Visit = { id:string; parkId:string; parkName:string; checkedInAt:string; ch
 type Store = { parks:Park[]; attractions:Attraction[]; visits:Visit[] }
 const KEY='park-logbook-fresh-v1'
 const kinds:Kind[]=['Coaster','Flat Ride','Dark Ride','Water Ride','Scare Maze','Scare Zone','Other']
-const icons:Record<Kind,string>={Coaster:'🎢','Flat Ride':'🎠','Dark Ride':'👻','Water Ride:'🌊','Scare Maze':'🎃','Scare Zone':'🧟',Other:'✨'}
+const icons:Record<Kind,string>={Coaster:'🎢','Flat Ride':'🎠','Dark Ride':'👻','Water Ride':'🌊','Scare Maze':'🎃','Scare Zone':'🧟',Other:'✨'}
 const blank:Store={parks:[],attractions:[],visits:[]}
 const uid=()=>crypto.randomUUID()
 const clock=(s:string)=>new Date(s).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})
@@ -27,7 +27,6 @@ export default function App(){
  const allLogs=data.visits.flatMap(v=>v.rides)
  const stats=(logs:RideLog[])=>{const coasters=logs.filter(r=>r.kind==='Coaster');const counts=new Map<string,number>();logs.forEach(r=>counts.set(r.name,(counts.get(r.name)||0)+1));const most=[...counts].sort((a,b)=>b[1]-a[1])[0];return {length:coasters.reduce((s,r)=>s+r.length,0),speed:Math.max(0,...coasters.map(r=>r.speed)),inversions:coasters.reduce((s,r)=>s+r.inversions,0),most:most?.[0]||'—',times:most?.[1]||0}}
  const years=[...new Set([String(new Date().getFullYear()),...data.visits.map(v=>String(new Date(v.checkedInAt).getFullYear()))])].sort((a,b)=>+b-+a)
- const yearStats=stats(allLogs.filter(r=>{const visit=data.visits.find(v=>v.rides.some(x=>x.id===r.id));return visit&&String(new Date(visit.checkedInAt).getFullYear())===year}))
  function addPark(e:FormEvent){e.preventDefault();if(!parkName.trim())return;setData(d=>({...d,parks:[...d.parks,{id:uid(),name:parkName.trim(),location:location.trim()}]}));setParkName('');setLocation('');setParkForm(false);setToast('Park added')}
  function addRide(e:FormEvent){e.preventDefault();if(!rideName.trim()||!parkId)return;setData(d=>({...d,attractions:[...d.attractions,{id:uid(),parkId,name:rideName.trim(),kind,length:kind==='Coaster'?Number(length)||0:0,speed:kind==='Coaster'?Number(speed)||0:0,inversions:kind==='Coaster'?Number(inversions)||0:0}]}));setRideName('');setLength('');setSpeed('');setInversions('');setRideForm(false);setToast('Attraction added')}
  function checkIn(e:FormEvent){e.preventDefault();const p=data.parks.find(x=>x.id===visitPark);if(!p)return;const now=new Date().toISOString();setData(d=>({...d,visits:[{id:uid(),parkId:p.id,parkName:p.name,checkedInAt:now,rides:[]},...d.visits]}));setToast('Checked in — have a brilliant day!')}
@@ -51,5 +50,5 @@ export default function App(){
 }
 function Stats({stats,title}:{stats:{length:number;speed:number;inversions:number;most:string;times:number};title:string}){return <section className="stats-block"><span className="eyebrow">{title}</span><div className="stats-grid"><article className="stat"><span>🛤️</span><strong>{Math.round(stats.length).toLocaleString()} ft</strong><small>Track travelled</small></article><article className="stat"><span>⚡</span><strong>{stats.speed} mph</strong><small>Top speed</small></article><article className="stat"><span>🌀</span><strong>{stats.inversions}</strong><small>Inversions experienced</small></article><article className="stat"><span>🏆</span><strong className="most">{stats.most}</strong><small>Most ridden{stats.times?' · '+stats.times+' times':''}</small></article></div></section>}
 function Heading({title,eyebrow,subtitle,action,onAction}:{title:string;eyebrow:string;subtitle:string;action?:string;onAction?:()=>void}){return <section className="page-heading"><span className="eyebrow">{eyebrow}</span><div className="heading-row"><h1>{title}</h1>{action&&<button className="small-action" onClick={onAction}>{action}</button>}</div><p>{subtitle}</p></section>}
-function Field({label,children}:{label:string;children:React.ReactNode}){return <label className="field"><span>{label}</span>{children}</label>}
+function Field({label,children}:{label:string;children:ReactNode}){return <label className="field"><span>{label}</span>{children}</label>}
 function Empty({icon,title,text,action,onClick}:{icon:string;title:string;text:string;action:string;onClick:()=>void}){return <section className="empty"><span>{icon}</span><h2>{title}</h2><p>{text}</p><button className="primary" onClick={onClick}>{action}</button></section>}
