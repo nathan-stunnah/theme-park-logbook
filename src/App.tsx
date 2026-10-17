@@ -12,6 +12,7 @@ const kinds:Kind[]=['Coaster','Flat Ride','Dark Ride','Water Ride','Scare Maze',
 const icons:Record<Kind,string>={Coaster:'🎢','Flat Ride':'🎠','Dark Ride':'👻','Water Ride':'🌊','Scare Maze':'🎃','Scare Zone':'🧟',Other:'✨'}
 const uid=()=>crypto.randomUUID()
 const ALTON_SEED_KEY='park-logbook-alton-screenshots-seeded-v1'
+const ALTON_ADDITIONS_KEY='park-logbook-alton-more-screenshots-seeded-v1'
 const ALTON_ATTRACTIONS: {name:string;kind:Kind;detail?:string}[]=[
  {name:"Andy's Adventure Dinosaur Dig",kind:'Other',detail:'Show / Live'},
  {name:'Battle Galleons',kind:'Water Ride'},
@@ -34,13 +35,39 @@ const ALTON_ATTRACTIONS: {name:string;kind:Kind;detail?:string}[]=[
  {name:'JoJo & Gran Gran At Home',kind:'Other',detail:'Walkthrough'},
  {name:'Nemesis: Sub-Terra',kind:'Other'},
 ]
-const normaliseName=(value:string)=>value.toLocaleLowerCase('en-GB').replace(/[^a-z0-9]/g,'')
-function seedAltonTowers(data:Store):Store{
+// Additional attractions visible in the next three Alton Towers screenshots.
+// Their names and types are editable in the normal attraction editor.
+const ALTON_ADDITIONS: typeof ALTON_ATTRACTIONS=[
+ {name:"Marauder's Mayhem",kind:'Flat Ride'},
+ {name:'Nemesis Reborn',kind:'Coaster'},
+ {name:'Oblivion',kind:'Coaster'},
+ {name:'Octonauts Rollercoaster Adventure',kind:'Coaster'},
+ {name:'Peter Rabbit Hippity Hop',kind:'Flat Ride'},
+ {name:"Raj's Bouncy Bottom Burp",kind:'Flat Ride'},
+ {name:'Royal Carousel',kind:'Flat Ride'},
+ {name:'Runaway Mine Train',kind:'Coaster'},
+ {name:'Sharkbait Reef',kind:'Other',detail:'Explore / Walkthrough'},
+ {name:'Sky Ride',kind:'Other',detail:'Transport Ride / Skyride'},
+ {name:'Smiler, The',kind:'Coaster'},
+ {name:'Spinball Whizzer',kind:'Coaster'},
+ {name:'Teletubbies Big Band Show',kind:'Other',detail:'Show'},
+ {name:'TH13TEEN',kind:'Coaster'},
+ {name:'Towers, The',kind:'Other',detail:'Explore / Walkthrough'},
+ {name:'Toxicator',kind:'Flat Ride'},
+ {name:'Wicker Man',kind:'Coaster'},
+ {name:"Battle Galleons Seadog Starkey's Sailing School",kind:'Other',detail:'Alternative Experience'},
+]
+const normaliseName=(value:string)=>value
+ .trim()
+ .replace(/^(.+),\s*The$/i,'The $1')
+ .toLocaleLowerCase('en-GB')
+ .replace(/[^a-z0-9]/g,'')
+function seedAltonTowers(data:Store, incoming:typeof ALTON_ATTRACTIONS=ALTON_ATTRACTIONS):Store{
  const existing=data.parks.find(p=>normaliseName(p.name)==='altontowers')
  const parkId=existing?.id ?? uid()
  const parks=existing ? data.parks : [...data.parks,{id:parkId,name:'Alton Towers',location:'Staffordshire, England'}]
  const known=new Set(data.attractions.filter(a=>a.parkId===parkId).map(a=>normaliseName(a.name)))
- const additions=ALTON_ATTRACTIONS.filter(a=>!known.has(normaliseName(a.name))).map(a=>({
+ const additions=incoming.filter(a=>!known.has(normaliseName(a.name))).map(a=>({
   id:uid(),parkId,name:a.name,kind:a.kind,detail:a.detail,length:0,speed:0,inversions:0
  }))
  return {...data,parks,attractions:[...data.attractions,...additions]}
@@ -54,13 +81,19 @@ function initialStore():Store{
    attractions:Array.isArray(parsed.attractions)?parsed.attractions:[],
    visits:Array.isArray(parsed.visits)?parsed.visits:[],
   }
-  if(localStorage.getItem(ALTON_SEED_KEY)==='1')return data
-  const seeded=seedAltonTowers(data)
-  // Save both together so React StrictMode cannot seed twice during initialisation.
+  const firstNeeded=localStorage.getItem(ALTON_SEED_KEY)!=='1'
+  const additionsNeeded=localStorage.getItem(ALTON_ADDITIONS_KEY)!=='1'
+  if(!firstNeeded&&!additionsNeeded)return data
+  let seeded=data
+  if(firstNeeded)seeded=seedAltonTowers(seeded)
+  if(additionsNeeded)seeded=seedAltonTowers(seeded,ALTON_ADDITIONS)
+  // Store markers separately: returning users receive only the new attractions,
+  // keeping any custom edits or deletions from the previous seed.
   localStorage.setItem(KEY,JSON.stringify(seeded))
-  localStorage.setItem(ALTON_SEED_KEY,'1')
+  if(firstNeeded)localStorage.setItem(ALTON_SEED_KEY,'1')
+  if(additionsNeeded)localStorage.setItem(ALTON_ADDITIONS_KEY,'1')
   return seeded
- }catch{return seedAltonTowers(data)}
+ }catch{return seedAltonTowers(seedAltonTowers(data),ALTON_ADDITIONS)}
 }
 const clock=(s:string)=>new Date(s).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})
 const day=(s:string)=>new Date(s).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})
