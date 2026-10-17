@@ -119,3 +119,30 @@ html, body, #root {
   box-shadow: 0 -5px 20px rgb(25 36 59 / 4%);
   z-index: 50;
 }
+
+
+/* Inline editing controls for preloaded and user-created attractions. */
+.park-card{position:relative}
+.park-toggle{padding-right:75px;min-height:70px}
+.park-card>.edit-card-button{
+ position:absolute;top:19px;right:12px;z-index:1;
+}
+.edit-card-button,.edit-row-button{
+ flex:0 0 auto;align-self:center;border:1px solid #dedaf8;
+ background:#f3f0ff;color:#6348d4;border-radius:10px;
+ padding:8px 11px;font-size:11px;font-weight:800;
+}
+.edit-card-button:focus-visible,.edit-row-button:focus-visible{
+ outline:2px solid var(--purple);outline-offset:2px;
+}
+.attraction-card .ride-info{flex:1;min-width:0}
+.attraction-card .edit-card-button{margin-left:auto}
+.park-details .simple-row>div{min-width:0;flex:1}
+.park-details .simple-row{gap:8px}
+.park-details{padding-left:18px}
+#park-form,#ride-form{scroll-margin-top:12px}
+@media(max-width:360px){
+ .edit-card-button,.edit-row-button{padding:7px 8px;font-size:10px}
+ .attraction-card{gap:7px;padding:10px}
+ .attraction-card .tile-icon{height:37px;width:37px;font-size:19px}
+}
