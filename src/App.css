@@ -211,3 +211,29 @@ html, body, #root {
 #ride-form {
   scroll-margin-top: 12px;
 }
+
+
+/*
+ * iOS Safari automatically zooms focused form controls with computed
+ * font-size below 16px, including installed Home Screen web apps.
+ * Keep all editable text and dropdowns at the 16px threshold without
+ * disabling pinch zoom or accessibility features.
+ */
+.app-shell input,
+.app-shell select,
+.app-shell textarea {
+  font-size: 16px;
+}
+
+/* Keep long selected names and labels inside narrow iPhone form rows. */
+.app-shell .field,
+.app-shell .year-picker,
+.app-shell .search-row {
+  min-width: 0;
+}
+.app-shell .field select,
+.app-shell .field input,
+.app-shell .search-row select,
+.app-shell .search-row input {
+  max-width: 100%;
+}
