@@ -3,32 +3,120 @@ import './App.css'
 
 type Kind = 'Coaster' | 'Flat Ride' | 'Dark Ride' | 'Water Ride' | 'Scare Maze' | 'Scare Zone' | 'Other'
 type Park = { id:string; name:string; location:string }
-type Attraction = { id:string; parkId:string; name:string; kind:Kind; length:number; speed:number; inversions:number }
+type Attraction = { id:string; parkId:string; name:string; kind:Kind; detail?:string; length:number; speed:number; inversions:number }
 type RideLog = { id:string; attractionId:string; name:string; kind:Kind; time:string; length:number; speed:number; inversions:number }
 type Visit = { id:string; parkId:string; parkName:string; checkedInAt:string; checkedOutAt?:string; rides:RideLog[] }
 type Store = { parks:Park[]; attractions:Attraction[]; visits:Visit[] }
 const KEY='park-logbook-fresh-v1'
 const kinds:Kind[]=['Coaster','Flat Ride','Dark Ride','Water Ride','Scare Maze','Scare Zone','Other']
 const icons:Record<Kind,string>={Coaster:'🎢','Flat Ride':'🎠','Dark Ride':'👻','Water Ride':'🌊','Scare Maze':'🎃','Scare Zone':'🧟',Other:'✨'}
-const blank:Store={parks:[],attractions:[],visits:[]}
 const uid=()=>crypto.randomUUID()
+const ALTON_SEED_KEY='park-logbook-alton-screenshots-seeded-v1'
+const ALTON_ATTRACTIONS: {name:string;kind:Kind;detail?:string}[]=[
+ {name:"Andy's Adventure Dinosaur Dig",kind:'Other',detail:'Show / Live'},
+ {name:'Battle Galleons',kind:'Water Ride'},
+ {name:"Bing Live: Bing's Day Out at CBeebies Land",kind:'Other',detail:'Show / Live'},
+ {name:"Bluey Live: Say G'day to Bluey & Bingo",kind:'Other',detail:'Show'},
+ {name:'Bluey the Ride: Here Come the Grannies!',kind:'Coaster'},
+ {name:'Bugbie Go Round',kind:'Flat Ride'},
+ {name:'Congo River Rapids',kind:'Water Ride'},
+ {name:'Cuckoo Cars Driving School',kind:'Flat Ride'},
+ {name:'Curse at Alton Manor, The',kind:'Dark Ride'},
+ {name:'Furchester Hotel Live, The',kind:'Other',detail:'Show'},
+ {name:'Galactica',kind:'Coaster'},
+ {name:'Gangsta Granny: The Ride',kind:'Dark Ride'},
+ {name:'Get Set Go TreeTop Adventure',kind:'Flat Ride'},
+ {name:'Go Jetters Vroomster Zoom Ride',kind:'Flat Ride'},
+ {name:'Heave Ho',kind:'Flat Ride'},
+ {name:'Hex - The Legend of the Towers',kind:'Dark Ride'},
+ {name:'Hey Duggee Live',kind:'Other',detail:'Show'},
+ {name:'In the Night Garden Magical Boat Ride',kind:'Water Ride'},
+ {name:'JoJo & Gran Gran At Home',kind:'Other',detail:'Walkthrough'},
+ {name:'Nemesis: Sub-Terra',kind:'Other'},
+]
+const normaliseName=(value:string)=>value.toLocaleLowerCase('en-GB').replace(/[^a-z0-9]/g,'')
+function seedAltonTowers(data:Store):Store{
+ const existing=data.parks.find(p=>normaliseName(p.name)==='altontowers')
+ const parkId=existing?.id ?? uid()
+ const parks=existing ? data.parks : [...data.parks,{id:parkId,name:'Alton Towers',location:'Staffordshire, England'}]
+ const known=new Set(data.attractions.filter(a=>a.parkId===parkId).map(a=>normaliseName(a.name)))
+ const additions=ALTON_ATTRACTIONS.filter(a=>!known.has(normaliseName(a.name))).map(a=>({
+  id:uid(),parkId,name:a.name,kind:a.kind,detail:a.detail,length:0,speed:0,inversions:0
+ }))
+ return {...data,parks,attractions:[...data.attractions,...additions]}
+}
+function initialStore():Store{
+ let data:Store={parks:[],attractions:[],visits:[]}
+ try{
+  const parsed=JSON.parse(localStorage.getItem(KEY)||'{}') as Partial<Store>
+  data={
+   parks:Array.isArray(parsed.parks)?parsed.parks:[],
+   attractions:Array.isArray(parsed.attractions)?parsed.attractions:[],
+   visits:Array.isArray(parsed.visits)?parsed.visits:[],
+  }
+  if(localStorage.getItem(ALTON_SEED_KEY)==='1')return data
+  const seeded=seedAltonTowers(data)
+  // Save both together so React StrictMode cannot seed twice during initialisation.
+  localStorage.setItem(KEY,JSON.stringify(seeded))
+  localStorage.setItem(ALTON_SEED_KEY,'1')
+  return seeded
+ }catch{return seedAltonTowers(data)}
+}
 const clock=(s:string)=>new Date(s).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})
 const day=(s:string)=>new Date(s).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})
 type Page='Home'|'Visits'|'Parks'|'Attractions'
 export default function App(){
- const [data,setData]=useState<Store>(()=>{try{return {...blank,...JSON.parse(localStorage.getItem(KEY)||'{}')}}catch{return blank}})
+ const [data,setData]=useState<Store>(initialStore)
  const [page,setPage]=useState<Page>('Home'),[year,setYear]=useState(String(new Date().getFullYear())),[statView,setStatView]=useState<'year'|'all'>('year')
- const [parkName,setParkName]=useState(''),[location,setLocation]=useState(''),[rideName,setRideName]=useState(''),[parkId,setParkId]=useState(''),[kind,setKind]=useState<Kind>('Coaster')
+ const [parkName,setParkName]=useState(''),[location,setLocation]=useState(''),[rideName,setRideName]=useState(''),[parkId,setParkId]=useState(''),[kind,setKind]=useState<Kind>('Coaster'),[detail,setDetail]=useState('')
  const [length,setLength]=useState(''),[speed,setSpeed]=useState(''),[inversions,setInversions]=useState(''),[visitPark,setVisitPark]=useState(''),[search,setSearch]=useState(''),[toast,setToast]=useState('')
- const [parkForm,setParkForm]=useState(false),[rideForm,setRideForm]=useState(false),[expanded,setExpanded]=useState<string[]>([])
+ const [parkForm,setParkForm]=useState(false),[rideForm,setRideForm]=useState(false),[expanded,setExpanded]=useState<string[]>([]),[editingParkId,setEditingParkId]=useState<string|null>(null),[editingRideId,setEditingRideId]=useState<string|null>(null)
  const active=data.visits.find(v=>!v.checkedOutAt)
  useEffect(()=>{localStorage.setItem(KEY,JSON.stringify(data))},[data])
  useEffect(()=>{if(!toast)return;const t=window.setTimeout(()=>setToast(''),2300);return()=>window.clearTimeout(t)},[toast])
  const allLogs=data.visits.flatMap(v=>v.rides)
  const stats=(logs:RideLog[])=>{const coasters=logs.filter(r=>r.kind==='Coaster');const counts=new Map<string,number>();logs.forEach(r=>counts.set(r.name,(counts.get(r.name)||0)+1));const most=[...counts].sort((a,b)=>b[1]-a[1])[0];return {length:coasters.reduce((s,r)=>s+r.length,0),speed:Math.max(0,...coasters.map(r=>r.speed)),inversions:coasters.reduce((s,r)=>s+r.inversions,0),most:most?.[0]||'—',times:most?.[1]||0}}
  const years=[...new Set([String(new Date().getFullYear()),...data.visits.map(v=>String(new Date(v.checkedInAt).getFullYear()))])].sort((a,b)=>+b-+a)
- function addPark(e:FormEvent){e.preventDefault();if(!parkName.trim())return;setData(d=>({...d,parks:[...d.parks,{id:uid(),name:parkName.trim(),location:location.trim()}]}));setParkName('');setLocation('');setParkForm(false);setToast('Park added')}
- function addRide(e:FormEvent){e.preventDefault();if(!rideName.trim()||!parkId)return;setData(d=>({...d,attractions:[...d.attractions,{id:uid(),parkId,name:rideName.trim(),kind,length:kind==='Coaster'?Number(length)||0:0,speed:kind==='Coaster'?Number(speed)||0:0,inversions:kind==='Coaster'?Number(inversions)||0:0}]}));setRideName('');setLength('');setSpeed('');setInversions('');setRideForm(false);setToast('Attraction added')}
+ function resetParkForm(){setParkName('');setLocation('');setParkForm(false);setEditingParkId(null)}
+ function beginParkForm(){setEditingParkId(null);setParkName('');setLocation('');setParkForm(true)}
+ function editPark(p:Park){setEditingParkId(p.id);setParkName(p.name);setLocation(p.location);setParkForm(true);setPage('Parks');requestAnimationFrame(()=>document.getElementById('park-form')?.scrollIntoView({behavior:'smooth',block:'start'}))}
+ function addPark(e:FormEvent){
+  e.preventDefault();const name=parkName.trim();if(!name)return
+  const locationValue=location.trim()
+  if(data.parks.some(p=>p.id!==editingParkId&&normaliseName(p.name)===normaliseName(name))){setToast('A park with that name already exists');return}
+  if(editingParkId){
+   setData(d=>({...d,parks:d.parks.map(p=>p.id===editingParkId?{...p,name,location:locationValue}:p),visits:d.visits.map(v=>v.parkId===editingParkId?{...v,parkName:name}:v)}))
+   setToast('Park updated')
+  }else{
+   setData(d=>({...d,parks:[...d.parks,{id:uid(),name,location:locationValue}]}))
+   setToast('Park added')
+  }
+  resetParkForm()
+ }
+ function resetRideForm(){setRideName('');setDetail('');setLength('');setSpeed('');setInversions('');setKind('Coaster');setRideForm(false);setEditingRideId(null)}
+ function beginRideForm(forPark=''){resetRideForm();if(forPark)setParkId(forPark);setRideForm(true)}
+ function editRide(a:Attraction){
+  setEditingRideId(a.id);setRideName(a.name);setParkId(a.parkId);setKind(a.kind);setDetail(a.detail||'')
+  setLength(a.length?String(a.length):'');setSpeed(a.speed?String(a.speed):'');setInversions(a.inversions?String(a.inversions):'')
+  setRideForm(true);setPage('Attractions')
+  requestAnimationFrame(()=>document.getElementById('ride-form')?.scrollIntoView({behavior:'smooth',block:'start'}))
+ }
+ function addRide(e:FormEvent){
+  e.preventDefault();const name=rideName.trim();if(!name||!parkId)return
+  if(data.attractions.some(a=>a.id!==editingRideId&&a.parkId===parkId&&normaliseName(a.name)===normaliseName(name))){setToast('Attraction already exists at this park');return}
+  const changes={parkId,name,kind,detail:kind==='Other'?detail.trim():undefined,
+   length:kind==='Coaster'?Math.max(0,Number(length)||0):0,
+   speed:kind==='Coaster'?Math.max(0,Number(speed)||0):0,
+   inversions:kind==='Coaster'?Math.max(0,Number(inversions)||0):0}
+  if(editingRideId){
+   setData(d=>({...d,attractions:d.attractions.map(a=>a.id===editingRideId?{...a,...changes}:a)}))
+   setToast('Attraction updated')
+  }else{
+   setData(d=>({...d,attractions:[...d.attractions,{id:uid(),...changes}]}))
+   setToast('Attraction added')
+  }
+  resetRideForm()
+ }
  function checkIn(e:FormEvent){e.preventDefault();const p=data.parks.find(x=>x.id===visitPark);if(!p)return;const now=new Date().toISOString();setData(d=>({...d,visits:[{id:uid(),parkId:p.id,parkName:p.name,checkedInAt:now,rides:[]},...d.visits]}));setToast('Checked in — have a brilliant day!')}
  function logRide(a:Attraction){if(!active)return;const r={id:uid(),attractionId:a.id,name:a.name,kind:a.kind,time:new Date().toISOString(),length:a.length,speed:a.speed,inversions:a.inversions};setData(d=>({...d,visits:d.visits.map(v=>v.id===active.id?{...v,rides:[...v.rides,r]}:v)}));setToast('Ride logged at '+clock(r.time))}
  function checkOut(){if(!active)return;setData(d=>({...d,visits:d.visits.map(v=>v.id===active.id?{...v,checkedOutAt:new Date().toISOString()}:v)}));setToast('Visit saved!')}
@@ -41,9 +129,9 @@ export default function App(){
   {page==='Home'&&<><section className="hero"><span className="eyebrow">YOUR ADVENTURE, YOUR STORY</span><h1>Every ride.<br/><em>Every memory.</em></h1><p>Your theme park history, one ride at a time.</p><button className="hero-button" onClick={()=>setPage('Visits')}>{active?'Continue your visit':'Log a park visit'} <b>→</b></button><span className="hero-art">🎡</span></section>
    <section className="year-picker"><div><span className="eyebrow">YOUR STATS</span><h2>Ride statistics</h2></div><select value={year} onChange={e=>{setYear(e.target.value);setStatView('year')}} aria-label="Statistics year">{years.map(y=><option key={y}>{y}</option>)}</select></section>
    <div className="stats-switch" role="group" aria-label="Statistics period"><button className={statView==='year'?'active':''} onClick={()=>setStatView('year')}>{year}</button><button className={statView==='all'?'active':''} onClick={()=>setStatView('all')}>All time</button></div><Stats stats={statView==='year'?chosenStats:stats(allLogs)} title={statView==='year'?year+' HIGHLIGHTS':'ALL-TIME ADVENTURE'}/>
-   <div className="quick-actions"><button onClick={()=>{setPage('Parks');setParkForm(true)}}><span>＋</span><div><strong>Add a park</strong><small>Build your park list</small></div><b>→</b></button><button onClick={()=>{setPage('Attractions');setRideForm(true)}}><span>🎠</span><div><strong>Add an attraction</strong><small>Coasters, rides and scares</small></div><b>→</b></button></div></>}
-  {page==='Parks'&&<><Heading title="Parks" eyebrow="YOUR DESTINATIONS" subtitle="All the places where your adventures happen." action={parkForm?'Cancel':'+ Add park'} onAction={()=>setParkForm(!parkForm)}/>{parkForm&&<form className="form-card" onSubmit={addPark}><Field label="Park name"><input required value={parkName} onChange={e=>setParkName(e.target.value)} placeholder="e.g. Alton Towers"/></Field><Field label="Location"><input value={location} onChange={e=>setLocation(e.target.value)} placeholder="Town, region or country"/></Field><button className="primary">Save park</button></form>}{!data.parks.length&&<Empty icon="🎡" title="Your park list starts here" text="Add your first park, then build its attraction list." action="Add your first park" onClick={()=>setParkForm(true)}/>}{data.parks.map(p=>{const rides=data.attractions.filter(a=>a.parkId===p.id),open=expanded.includes(p.id);return <section className="park-card" key={p.id}><button className="park-toggle" onClick={()=>setExpanded(s=>open?s.filter(x=>x!==p.id):[...s,p.id])}><span className="tile-icon">🎡</span><span className="park-info"><strong>{p.name}</strong><small>{p.location||'Location not added'} · {rides.length} attractions</small></span><b>{open?'−':'＋'}</b></button>{open&&<div className="park-details">{rides.length?rides.map(a=><div className="simple-row" key={a.id}><span>{icons[a.kind]}</span><div><strong>{a.name}</strong><small>{a.kind}</small></div></div>):<p className="muted">No attractions yet.</p>}<button className="text-button" onClick={()=>{setParkId(p.id);setPage('Attractions');setRideForm(true)}}>＋ Add attraction to this park</button></div>}</section>})}</>}
-  {page==='Attractions'&&<><Heading title="Attractions" eyebrow="YOUR RIDE COLLECTION" subtitle="Every coaster, ride and scare experience." action={rideForm?'Cancel':'+ Add attraction'} onAction={()=>setRideForm(!rideForm)}/>{rideForm&&<form className="form-card" onSubmit={addRide}><Field label="Attraction name"><input required value={rideName} onChange={e=>setRideName(e.target.value)} placeholder="e.g. The Smiler"/></Field><Field label="Park"><select required value={parkId} onChange={e=>setParkId(e.target.value)}><option value="">Choose a park</option>{data.parks.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></Field><Field label="Attraction type"><select value={kind} onChange={e=>setKind(e.target.value as Kind)}>{kinds.map(k=><option key={k}>{k}</option>)}</select></Field>{kind==='Coaster'&&<div className="coaster-fields"><span className="eyebrow">COASTER DETAILS</span><Field label="Track length (feet)"><input type="number" min="0" value={length} onChange={e=>setLength(e.target.value)} placeholder="e.g. 3837"/></Field><div className="two-fields"><Field label="Top speed (mph)"><input type="number" min="0" value={speed} onChange={e=>setSpeed(e.target.value)} placeholder="e.g. 53"/></Field><Field label="Inversions"><input type="number" min="0" value={inversions} onChange={e=>setInversions(e.target.value)} placeholder="e.g. 14"/></Field></div></div>}<button className="primary" disabled={!data.parks.length}>Save attraction</button>{!data.parks.length&&<p className="muted">Add a park first.</p>}</form>}<div className="search-row"><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search attractions…"/><select value={parkId} onChange={e=>setParkId(e.target.value)}><option value="">All parks</option>{data.parks.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>{data.attractions.filter(a=>(!parkId||a.parkId===parkId)&&a.name.toLowerCase().includes(search.toLowerCase())).map(a=><section className="attraction-card" key={a.id}><span className="tile-icon">{icons[a.kind]}</span><div className="ride-info"><strong>{a.name}</strong><small>{data.parks.find(p=>p.id===a.parkId)?.name} · {a.kind}</small>{a.kind==='Coaster'&&<small>{a.length.toLocaleString()} ft · {a.speed} mph · {a.inversions} inversions</small>}</div></section>)}{!data.attractions.length&&<Empty icon="🎢" title="No attractions yet" text="Add an attraction and it will appear here." action="Add attraction" onClick={()=>setRideForm(true)}/>}</>}
+   <div className="quick-actions"><button onClick={()=>{setPage('Parks');beginParkForm()}}><span>＋</span><div><strong>Add a park</strong><small>Build your park list</small></div><b>→</b></button><button onClick={()=>{setPage('Attractions');beginRideForm()}}><span>🎠</span><div><strong>Add an attraction</strong><small>Coasters, rides and scares</small></div><b>→</b></button></div></>}
+  {page==='Parks'&&<><Heading title="Parks" eyebrow="YOUR DESTINATIONS" subtitle="All the places where your adventures happen." action={parkForm?'Cancel':'+ Add park'} onAction={()=>parkForm?resetParkForm():beginParkForm()}/>{parkForm&&<form id="park-form" className="form-card" onSubmit={addPark}><Field label="Park name"><input required value={parkName} onChange={e=>setParkName(e.target.value)} placeholder="e.g. Alton Towers"/></Field><Field label="Location"><input value={location} onChange={e=>setLocation(e.target.value)} placeholder="Town, region or country"/></Field><button className="primary">{editingParkId?'Save changes':'Save park'}</button></form>}{!data.parks.length&&<Empty icon="🎡" title="Your park list starts here" text="Add your first park, then build its attraction list." action="Add your first park" onClick={()=>setParkForm(true)}/>}{data.parks.map(p=>{const rides=data.attractions.filter(a=>a.parkId===p.id),open=expanded.includes(p.id);return <section className="park-card" key={p.id}><button className="park-toggle" onClick={()=>setExpanded(s=>open?s.filter(x=>x!==p.id):[...s,p.id])}><span className="tile-icon">🎡</span><span className="park-info"><strong>{p.name}</strong><small>{p.location||'Location not added'} · {rides.length} attractions</small></span><b>{open?'−':'＋'}</b></button><button className="edit-card-button" type="button" onClick={()=>editPark(p)} aria-label={'Edit park '+p.name}>Edit</button>{open&&<div className="park-details">{rides.length?rides.map(a=><div className="simple-row" key={a.id}><span>{icons[a.kind]}</span><div><strong>{a.name}</strong><small>{a.kind==='Other'&&a.detail?a.detail:a.kind}</small></div><button className="edit-row-button" type="button" onClick={()=>editRide(a)}>Edit</button></div>):<p className="muted">No attractions yet.</p>}<button className="text-button" onClick={()=>{setPage('Attractions');beginRideForm(p.id)}}>＋ Add attraction to this park</button></div>}</section>})}</>}
+  {page==='Attractions'&&<><Heading title="Attractions" eyebrow="YOUR RIDE COLLECTION" subtitle="Every coaster, ride and scare experience." action={rideForm?'Cancel':'+ Add attraction'} onAction={()=>rideForm?resetRideForm():beginRideForm()}/>{rideForm&&<form id="ride-form" className="form-card" onSubmit={addRide}><Field label="Attraction name"><input required value={rideName} onChange={e=>setRideName(e.target.value)} placeholder="e.g. The Smiler"/></Field><Field label="Park"><select required value={parkId} onChange={e=>setParkId(e.target.value)}><option value="">Choose a park</option>{data.parks.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></Field><Field label="Attraction type"><select value={kind} onChange={e=>setKind(e.target.value as Kind)}>{kinds.map(k=><option key={k}>{k}</option>)}</select></Field>{kind==='Other'&&<Field label="Specific type (optional)"><input value={detail} onChange={e=>setDetail(e.target.value)} placeholder="e.g. Show, Walkthrough"/></Field>}{kind==='Coaster'&&<div className="coaster-fields"><span className="eyebrow">COASTER DETAILS</span><Field label="Track length (feet)"><input type="number" min="0" value={length} onChange={e=>setLength(e.target.value)} placeholder="e.g. 3837"/></Field><div className="two-fields"><Field label="Top speed (mph)"><input type="number" min="0" value={speed} onChange={e=>setSpeed(e.target.value)} placeholder="e.g. 53"/></Field><Field label="Inversions"><input type="number" min="0" value={inversions} onChange={e=>setInversions(e.target.value)} placeholder="e.g. 14"/></Field></div></div>}<button className="primary" disabled={!data.parks.length}>{editingRideId?'Save changes':'Save attraction'}</button>{!data.parks.length&&<p className="muted">Add a park first.</p>}</form>}<div className="search-row"><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search attractions…"/><select value={parkId} onChange={e=>setParkId(e.target.value)}><option value="">All parks</option>{data.parks.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>{data.attractions.filter(a=>(!parkId||a.parkId===parkId)&&a.name.toLowerCase().includes(search.toLowerCase())).map(a=><section className="attraction-card" key={a.id}><span className="tile-icon">{icons[a.kind]}</span><div className="ride-info"><strong>{a.name}</strong><small>{data.parks.find(p=>p.id===a.parkId)?.name} · {a.kind==='Other'&&a.detail?a.detail:a.kind}</small>{a.kind==='Coaster'&&<small>{a.length.toLocaleString()} ft · {a.speed} mph · {a.inversions} inversions</small>}</div><button className="edit-card-button" type="button" onClick={()=>editRide(a)} aria-label={'Edit attraction '+a.name}>Edit</button></section>)}{!data.attractions.length&&<Empty icon="🎢" title="No attractions yet" text="Add an attraction and it will appear here." action="Add attraction" onClick={()=>beginRideForm()}/>}</>}
   {page==='Visits'&&<><Heading title="Visits" eyebrow="YOUR PARK DAYS" subtitle="Check in, log each ride, check out when you're done." />{active?<section className="active-visit"><span className="live-label"><i/> VISIT IN PROGRESS</span><h2>{active.parkName}</h2><p>Checked in at {clock(active.checkedInAt)} · {active.rides.length} rides logged</p><hr/><h3>Log an attraction</h3><input className="visit-search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Find a ride…"/>{data.attractions.filter(a=>a.parkId===active.parkId&&a.name.toLowerCase().includes(search.toLowerCase())).map(a=><button className="log-row" key={a.id} onClick={()=>logRide(a)}><span>{icons[a.kind]}</span><div><strong>{a.name}</strong><small>{a.kind}</small></div><b>＋</b></button>)}<hr/><h3>Today's ride log <span className="count">{active.rides.length}</span></h3>{[...active.rides].reverse().map(r=><div className="simple-row" key={r.id}><span>{icons[r.kind]}</span><div><strong>{r.name}</strong><small>{clock(r.time)}</small></div></div>)}<button className="checkout" onClick={checkOut}>Check out and save visit</button></section>:<><section className="checkin-card"><span>🎟️</span><h2>Ready for a park day?</h2><p>Check in to start logging rides. Every ride gets its own timestamp.</p><form onSubmit={checkIn}><Field label="Choose a park"><select required value={visitPark} onChange={e=>setVisitPark(e.target.value)}><option value="">Select a park</option>{data.parks.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></Field><button className="primary" disabled={!data.parks.length}>Check in to park</button></form>{!data.parks.length&&<p className="muted">Add a park before checking in.</p>}</section><h3 className="history-title">Visit history</h3>{data.visits.map(v=><section className="history-card" key={v.id}><span className="tile-icon">🎡</span><div className="history-info"><strong>{v.parkName}</strong><small>{day(v.checkedInAt)} · {v.rides.length} rides</small><small>{clock(v.checkedInAt)}{v.checkedOutAt?' – '+clock(v.checkedOutAt):''}</small></div><span className="status">Saved</span>{v.rides.length>0&&<div className="history-rides">{v.rides.map(r=><span key={r.id}>{icons[r.kind]} {r.name}<b>{clock(r.time)}</b></span>)}</div>}</section>)}</>}</>}
   </main><nav className="bottom-nav">{nav.map(n=><button key={n.label} className={page===n.label?'nav-item selected':'nav-item'} onClick={()=>{setPage(n.label);setSearch('')}}><span>{n.icon}</span><small>{n.label}</small></button>)}</nav>{toast&&<div className="toast" role="status">✓ {toast}</div>}
  </div>
