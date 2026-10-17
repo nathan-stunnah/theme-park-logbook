@@ -62,3 +62,60 @@ html,body,#root{height:100%;overflow:hidden}
  .stats-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
  .bottom-nav{left:auto;right:auto;transform:none;width:min(100%,720px);margin:0 auto;border-radius:18px 18px 0 0}
 }
+
+
+/*
+ * iOS standalone PWA: anchor tabs to the visual bottom edge.
+ * The older .content margin:auto and flex-positioned nav could leave
+ * unused space under the tab bar on tall iPhones.
+ */
+:root {
+  --bottom-tab-space: calc(66px + env(safe-area-inset-bottom, 0px));
+}
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+.app-shell {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100dvh;
+  min-height: 0;
+  padding: 0 0 var(--bottom-tab-space);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.topbar {
+  flex-shrink: 0;
+}
+.content {
+  flex: 1 1 0%;
+  min-height: 0;
+  margin: 0 auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior-y: contain;
+}
+.bottom-nav {
+  position: fixed;
+  inset: auto 0 0;
+  width: 100%;
+  max-width: none;
+  min-height: var(--bottom-tab-space);
+  margin: 0;
+  padding: 8px max(10px, env(safe-area-inset-left, 0px))
+           calc(8px + env(safe-area-inset-bottom, 0px))
+           max(10px, env(safe-area-inset-right, 0px));
+  transform: none;
+  border-radius: 0;
+  border-top: 1px solid var(--line);
+  border-right: 0;
+  border-left: 0;
+  border-bottom: 0;
+  background: #fff;
+  box-shadow: 0 -5px 20px rgb(25 36 59 / 4%);
+  z-index: 50;
+}
