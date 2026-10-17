@@ -21,7 +21,7 @@ export default defineConfig({
         id: '/',
         lang: 'en-GB',
         theme_color: '#6d28d9',
-        background_color: '#fff8ed',
+        background_color: '#f5f7fb',
         display: 'standalone',
         start_url: '/',
         scope: '/',

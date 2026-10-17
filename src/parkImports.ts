@@ -1,4 +1,4 @@
-import type { Category } from './App'
+type Category = 'Rollercoaster' | 'Flat Ride' | 'Dark Ride' | 'Water Ride' | 'Family Ride' | 'Show/Attraction' | 'Scare Maze' | 'Scare Zone' | 'Scare Attraction'
 import { COASTERPEDIA_CATALOG } from './coasterpediaCatalog'
 
 export const COASTER_TYPES = [...COASTERPEDIA_CATALOG.coasterTypes]
