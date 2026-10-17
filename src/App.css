@@ -146,3 +146,68 @@ html, body, #root {
  .attraction-card{gap:7px;padding:10px}
  .attraction-card .tile-icon{height:37px;width:37px;font-size:19px}
 }
+
+
+/* Park and attraction editing controls */
+.park-card,
+.attraction-card {
+  position: relative;
+}
+.park-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.park-toggle {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.park-details {
+  width: 100%;
+}
+.park-details .simple-row {
+  min-width: 0;
+}
+.park-details .simple-row > div {
+  min-width: 0;
+  flex: 1;
+}
+.edit-card-button,
+.edit-row-button {
+  appearance: none;
+  flex: 0 0 auto;
+  border: 1px solid #dcd5fa;
+  border-radius: 10px;
+  color: #6044d8;
+  background: #f6f3ff;
+  padding: 8px 10px;
+  font-weight: 800;
+  font-size: 11px;
+  line-height: 1.2;
+}
+.park-card > .edit-card-button {
+  margin-right: 12px;
+}
+.attraction-card > .edit-card-button {
+  margin-left: auto;
+}
+.edit-row-button {
+  margin-left: auto;
+}
+.edit-card-button:focus-visible,
+.edit-row-button:focus-visible {
+  outline: 3px solid #ac9cf5;
+  outline-offset: 2px;
+}
+.ride-info {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.park-toggle .park-info {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+#park-form,
+#ride-form {
+  scroll-margin-top: 12px;
+}
